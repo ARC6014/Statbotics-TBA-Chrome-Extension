@@ -27,10 +27,11 @@
     "16": "Arcbotics Logo.png",
     "32": "Arcbotics Logo.png",
     "48": "Arcbotics Logo.png",
-    "128": "Arcbotics Logo.png",
-  }
+    "128": "Arcbotics Logo.png"
+  },
   "browser_specific_settings": {
-  "gecko": {
-    "id": "ThisIsFakeID@example.com"
+    "gecko": {
+      "id": "ThisIsFakeID@example.com"
+    }
   }
 }
