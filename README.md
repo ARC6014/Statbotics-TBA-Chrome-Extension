@@ -10,4 +10,4 @@ Key Features:\
 \
     Rankings & Awards: On the rankings page, you can easily see which teams won awards alongside their average EPA in a total sense.\
 \
-    Match Predictions: See win-probability predictions directly on the match page before the game even begins, and see if the predictions were true.\
+    Match Predictions: See win-probability predictions directly on the match page before the game even begins, and see if the predictions were true.
