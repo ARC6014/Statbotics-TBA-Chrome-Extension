@@ -1,4 +1,5 @@
 THIS IS A FORK TO PORT FIREFOX (see OG here: https://github.com/ARC6014/Statbotics-TBA-Chrome-Extension) \
+\
 This extension overlays Statbotics data on TBA\
 \
 Key Features:\
