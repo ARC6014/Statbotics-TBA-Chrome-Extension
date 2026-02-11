@@ -1,7 +1,7 @@
 {
   "name": "Arcbotics - Statbotics Inside TBA (The Blue Alliance)",
   "description": "This extension brings scouting statistics from Statbotics into TBA (The Blue Alliance) Developed by Yusuf Ege Doğan of ARC#6014",
-  "version": "0.1",
+  "version": "0.2",
   "manifest_version": 3,
   "action": {
     "default_popup": "home.html"
