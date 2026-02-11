@@ -1,5 +1,5 @@
 let config = {
-    TBA_API_KEY: "YOUR_TBA_API_KEY",
+    TBA_API_KEY: "YOUR_TBA_API_KEY_HERE",
     STATBOTICS_API_URL: "https://api.statbotics.io/v3",
     TBA_API_URL: "https://www.thebluealliance.com/api/v3"
 };
@@ -431,39 +431,10 @@ if (window.location.href.includes("https://www.thebluealliance.com/event/")) {
                     const headerRow = RankingsTable.querySelector("thead tr");
                     if (headerRow && !headerRow.querySelector(".awards-header-added")) {
                         const awardsHeader = document.createElement("th");
-                        awardsHeader.textContent = "EPA Mean";
+                        awardsHeader.textContent = "Awards";
                         awardsHeader.classList.add("tablesorter-header", "awards-header-added"); 
                         awardsHeader.style.width = "100px"; 
                         headerRow.appendChild(awardsHeader);
-
-                        let existingLoading = document.querySelector('.extension-statbotics-loading');
-                        if (!existingLoading) {
-                            const eventTitleDiv = document.querySelector("#event-name");
-                            const loading = document.createElement('div');
-                            loading.className = 'extension-statbotics-loading';
-                            loading.textContent = 'Loading EPA Mean data...';
-                            loading.style.backgroundColor = '#D76198';
-                            loading.style.color = '#ffffff';
-                            loading.style.padding = '2px 6px';
-                            loading.style.borderRadius = '3px';
-                            loading.style.fontSize = '10px';
-                            loading.style.opacity = '1';
-                            loading.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
-                            loading.style.display = 'inline-block';
-                            if (eventTitleDiv) {
-                                awardsHeader.appendChild(loading);
-                            } else {
-                                document.body.appendChild(loading);
-                            }
-
-                            setTimeout(() => {
-                                loading.style.opacity = '0';
-                                loading.style.transform = 'translateY(-6px)';
-                                setTimeout(() => {
-                                    if (loading.parentNode) loading.remove();
-                                }, 500);
-                            }, 12000);
-                        }
                     }
                     
                     const tableRows = RankingsTable.querySelectorAll("tbody > tr"); 
@@ -513,7 +484,7 @@ if (window.location.href.includes("https://www.thebluealliance.com/event/")) {
                     const headerRow = RankingsTable.querySelector("thead tr");
                     if (headerRow && !headerRow.querySelector(".epa-header-added")) {
                         const epaHeader = document.createElement("th");
-                        epaHeader.textContent = "Awards";
+                        epaHeader.textContent = "EPA Mean";
                         epaHeader.classList.add("tablesorter-header", "epa-header-added"); 
                         epaHeader.style.width = "70px"; 
                         headerRow.appendChild(epaHeader);
@@ -522,8 +493,6 @@ if (window.location.href.includes("https://www.thebluealliance.com/event/")) {
                     const tableRows = RankingsTable.querySelectorAll("tbody > tr"); 
 
                     let year = eventID.slice(0,4);
-
-                    let teamEpaData = [];
 
                     for (let i = 0; i < tableRows.length; i++) {
                         const currentRow = tableRows[i]; 
@@ -535,35 +504,27 @@ if (window.location.href.includes("https://www.thebluealliance.com/event/")) {
                         
                         const teamNumber = teamLink.textContent.trim();
 
-                        await sendGetRequestForTeamInfo(teamNumber, year).then(data => {
-                            const teamData = data;
-                            //console.log(teamData);
-
-                            teamEpaData.push(teamData.epa.total_points.mean);
-                        });
-                    }
-
-                    for (let i = 0; i < tableRows.length; i++) {
-                        const currentRow = tableRows[i]; 
-                        
                         const epaCell = document.createElement("td");
-
                         epaCell.style.padding = "5px 10px";
                         epaCell.style.border = "1px solid #ddd";
                         epaCell.style.textAlign = "center";
                         epaCell.style.fontSize = "0.85em"; 
                         epaCell.style.color = "#73176dff";
+                        epaCell.textContent = "Loading...";
 
                         addInfoPopupStatbotics(epaCell);
-                        
-                        if (teamEpaData.length > 0) {
-                            epaCell.textContent = teamEpaData[i] !== undefined ? teamEpaData[i] : "-";                 
-                        } 
-                        else {
-                            epaCell.textContent = "-"; 
-                        }
-                        
                         currentRow.appendChild(epaCell);
+
+                        sendGetRequestForTeamInfo(teamNumber, year).then(data => {
+                            const teamData = data;
+                            if (teamData && teamData.epa && teamData.epa.total_points && teamData.epa.total_points.mean !== undefined && teamData.epa.total_points.mean !== null) {
+                                epaCell.textContent = teamData.epa.total_points.mean;
+                            } else {
+                                epaCell.textContent = "-";
+                            }
+                        }).catch(err => {
+                            epaCell.textContent = "-";
+                        });
                     }
                 }
 
