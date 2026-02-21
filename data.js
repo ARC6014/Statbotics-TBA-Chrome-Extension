@@ -1,5 +1,5 @@
 let config = {
-    TBA_API_KEY: "YOUR_TBA_API_KEY_HERE",
+    TBA_API_KEY: "YOUR_TBA_API",
     STATBOTICS_API_URL: "https://api.statbotics.io/v3",
     TBA_API_URL: "https://www.thebluealliance.com/api/v3"
 };
@@ -273,6 +273,12 @@ if (window.location.href.includes("https://www.thebluealliance.com/event/")) {
             return data;
         };
 
+        let sendGetRequestForTeamInfoForEvent = async (teamNumber, event) => {
+            let response = await fetch(`${config.STATBOTICS_API_URL}/team_event/${teamNumber}/${event}`);
+            let data = await response.json();
+            return data;
+        };
+
         let sendGetRequestForAwardsInfo = async (eventID) => {
             let eventIDSplit = eventID.split("#")[0];
             let response = await fetch(`${config.TBA_API_URL}/event/${eventIDSplit}/awards`, {
@@ -459,7 +465,7 @@ if (window.location.href.includes("https://www.thebluealliance.com/event/")) {
                         if (teamAwards.length > 0) {
                             const awardNames = teamAwards.map(award => award.name);
                             
-                            const awardsHtml = awardNames.join('<br>');
+                            const awardsHtml = awardNames.join('<br> <hr style="border: none; border-top: 1px solid #73176dff; margin: 5px 0;"> ');
                             
                             awardsCell.innerHTML = awardsHtml; 
                             
@@ -483,11 +489,17 @@ if (window.location.href.includes("https://www.thebluealliance.com/event/")) {
 
                     const headerRow = RankingsTable.querySelector("thead tr");
                     if (headerRow && !headerRow.querySelector(".epa-header-added")) {
-                        const epaHeader = document.createElement("th");
-                        epaHeader.textContent = "EPA Mean";
-                        epaHeader.classList.add("tablesorter-header", "epa-header-added"); 
-                        epaHeader.style.width = "70px"; 
-                        headerRow.appendChild(epaHeader);
+                        const seasonEpaHeader = document.createElement("th");
+                        seasonEpaHeader.textContent = "Season EPA Mean";
+                        seasonEpaHeader.classList.add("tablesorter-header", "epa-header-added"); 
+                        seasonEpaHeader.style.width = "70px"; 
+                        headerRow.appendChild(seasonEpaHeader);
+
+                        const eventEpaHeader = document.createElement("th");
+                        eventEpaHeader.textContent = "Event EPA Mean";
+                        eventEpaHeader.classList.add("tablesorter-header", "epa-header-added"); 
+                        eventEpaHeader.style.width = "70px"; 
+                        headerRow.appendChild(eventEpaHeader);
                     }
 
                     const tableRows = RankingsTable.querySelectorAll("tbody > tr"); 
@@ -504,26 +516,48 @@ if (window.location.href.includes("https://www.thebluealliance.com/event/")) {
                         
                         const teamNumber = teamLink.textContent.trim();
 
-                        const epaCell = document.createElement("td");
-                        epaCell.style.padding = "5px 10px";
-                        epaCell.style.border = "1px solid #ddd";
-                        epaCell.style.textAlign = "center";
-                        epaCell.style.fontSize = "0.85em"; 
-                        epaCell.style.color = "#73176dff";
-                        epaCell.textContent = "Loading...";
+                        const seasonEpaCell = document.createElement("td");
+                        seasonEpaCell.style.padding = "5px 10px";
+                        seasonEpaCell.style.border = "1px solid #ddd";
+                        seasonEpaCell.style.textAlign = "center";
+                        seasonEpaCell.style.fontSize = "0.85em"; 
+                        seasonEpaCell.style.color = "#73176dff";
+                        seasonEpaCell.textContent = "Loading...";
 
-                        addInfoPopupStatbotics(epaCell);
-                        currentRow.appendChild(epaCell);
+                        const eventEpaCell = document.createElement("td");
+                        eventEpaCell.style.padding = "5px 10px";
+                        eventEpaCell.style.border = "1px solid #ddd";
+                        eventEpaCell.style.textAlign = "center";
+                        eventEpaCell.style.fontSize = "0.85em"; 
+                        eventEpaCell.style.color = "#73176dff";
+                        eventEpaCell.textContent = "Loading...";          
+
+                        addInfoPopupStatbotics(seasonEpaCell);
+                        currentRow.appendChild(seasonEpaCell);
+
+                        addInfoPopupStatbotics(eventEpaCell);
+                        currentRow.appendChild(eventEpaCell);
 
                         sendGetRequestForTeamInfo(teamNumber, year).then(data => {
                             const teamData = data;
                             if (teamData && teamData.epa && teamData.epa.total_points && teamData.epa.total_points.mean !== undefined && teamData.epa.total_points.mean !== null) {
-                                epaCell.textContent = teamData.epa.total_points.mean;
+                                seasonEpaCell.textContent = teamData.epa.total_points.mean;
                             } else {
-                                epaCell.textContent = "-";
+                                seasonEpaCell.textContent = "-";
                             }
                         }).catch(err => {
-                            epaCell.textContent = "-";
+                            seasonEpaCell.textContent = "-";
+                        });
+
+                        sendGetRequestForTeamInfoForEvent(teamNumber, eventID).then(data => {
+                            const teamData = data;
+                            if (teamData && teamData.epa && teamData.epa.total_points && teamData.epa.total_points.mean !== undefined && teamData.epa.total_points.mean !== null) {
+                                eventEpaCell.textContent = teamData.epa.total_points.mean;
+                            } else {
+                                eventEpaCell.textContent = "-";
+                            }
+                        }).catch(err => {
+                            eventEpaCell.textContent = "-";
                         });
                     }
                 }
