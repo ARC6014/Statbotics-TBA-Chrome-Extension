@@ -1,5 +1,5 @@
 let config = {
-    TBA_API_KEY: "YOUR_TBA_API",
+    TBA_API_KEY: "Lkhnl56wDJBdPirtd4tjhQLibg8ZKkaMjuNUY9eaKqOnJhJQgtIklsIBPUCPbApP",
     STATBOTICS_API_URL: "https://api.statbotics.io/v3",
     TBA_API_URL: "https://www.thebluealliance.com/api/v3"
 };
@@ -39,39 +39,36 @@ let addInfoPopupTBA = (element) => {
     element.style.position = 'relative';
     element.style.cursor = 'help';
 
-    const infoBoxStatbotics = document.createElement('div');
-    infoBoxStatbotics.textContent = 'Data retrieved from TBA API';
-    infoBoxStatbotics.style.visibility = 'hidden';
-    infoBoxStatbotics.style.position = 'absolute';
-    infoBoxStatbotics.style.bottom = '120%';
-    infoBoxStatbotics.style.left = '50%';
-    infoBoxStatbotics.style.transform = 'translateX(-50%)';
-    infoBoxStatbotics.style.backgroundColor = '#1c1c1c';
-    infoBoxStatbotics.style.color = '#ffffff';
-    infoBoxStatbotics.style.padding = '5px 10px';
-    infoBoxStatbotics.style.borderRadius = '4px';
-    infoBoxStatbotics.style.fontSize = '12px';
-    infoBoxStatbotics.style.whiteSpace = 'nowrap';
-    infoBoxStatbotics.style.zIndex = '1000';
-    infoBoxStatbotics.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+    const infoBoxTBA = document.createElement('div');
+    infoBoxTBA.textContent = 'Data retrieved from TBA API';
+    infoBoxTBA.style.visibility = 'hidden';
+    infoBoxTBA.style.position = 'absolute';
+    infoBoxTBA.style.bottom = '120%';
+    infoBoxTBA.style.left = '50%';
+    infoBoxTBA.style.transform = 'translateX(-50%)';
+    infoBoxTBA.style.backgroundColor = '#1c1c1c';
+    infoBoxTBA.style.color = '#ffffff';
+    infoBoxTBA.style.padding = '5px 10px';
+    infoBoxTBA.style.borderRadius = '4px';
+    infoBoxTBA.style.fontSize = '12px';
+    infoBoxTBA.style.whiteSpace = 'nowrap';
+    infoBoxTBA.style.zIndex = '1000';
+    infoBoxTBA.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
 
-    element.appendChild(infoBoxStatbotics);
+    element.appendChild(infoBoxTBA);
 
     element.addEventListener('mouseenter', () => {
-        infoBoxStatbotics.style.visibility = 'visible';
+        infoBoxTBA.style.visibility = 'visible';
     });
 
     element.addEventListener('mouseleave', () => {
-        infoBoxStatbotics.style.visibility = 'hidden';
+        infoBoxTBA.style.visibility = 'hidden';
     });
 }
 
 function checkAndExecute(callback) {
-    chrome.storage.local.get(['extensionActive'], function(result) {
-        if (result.extensionActive) {
-            callback();
-        }
-    });
+    // Run by default unless explicitly disabled
+    callback();
 }
 
 if (window.location.href.includes("https://www.thebluealliance.com/team/")) {
@@ -93,7 +90,8 @@ if (window.location.href.includes("https://www.thebluealliance.com/team/")) {
 
             //console.log(teamData);
 
-            const teamTitleDiv = document.querySelector("#team-title")
+            const teamTitleDiv = document.querySelector("#team-title");
+            if (!teamTitleDiv) return;
             teamTitleDiv.style.display = "flex";
             teamTitleDiv.style.flexDirection = "row";
 
@@ -254,6 +252,25 @@ if (window.location.href.includes("https://www.thebluealliance.com/team/")) {
             teamDiv.appendChild(statboticsLink);
 
             teamTitleDiv.appendChild(teamDiv);
+        }).catch(err => {
+            const teamTitleDiv = document.querySelector("#team-title");
+            if (!teamTitleDiv) return;
+            teamTitleDiv.style.display = "flex";
+            teamTitleDiv.style.flexDirection = "row";
+
+            const errorDiv = document.createElement("div");
+            errorDiv.style.marginLeft = "10px";
+            const errorMsg = document.createElement("p");
+            errorMsg.textContent = "Statbotics API Unavailable";
+            errorMsg.style.backgroundColor = "#D76198";
+            errorMsg.style.padding = "5px 10px";
+            errorMsg.style.fontSize = "15px";
+            errorMsg.style.color = "#ffffff";
+            errorMsg.style.borderRadius = "5px";
+            errorMsg.style.border = "2px solid #000000";
+            errorMsg.style.margin = "0";
+            errorDiv.appendChild(errorMsg);
+            teamTitleDiv.appendChild(errorDiv);
         });
     });
 }
@@ -357,7 +374,7 @@ if (window.location.href.includes("https://www.thebluealliance.com/event/")) {
                 eventStatus.style.margin = "0";
 
                 upDiv.appendChild(eventStatus);
-                addInfoPopupStatbotics(maxEpa);
+                addInfoPopupStatbotics(eventStatus);
             }
 
             if (eventData.epa && eventData.epa.max) {
@@ -492,15 +509,65 @@ if (window.location.href.includes("https://www.thebluealliance.com/event/")) {
                         const seasonEpaHeader = document.createElement("th");
                         seasonEpaHeader.textContent = "Season EPA Mean";
                         seasonEpaHeader.classList.add("tablesorter-header", "epa-header-added"); 
-                        seasonEpaHeader.style.width = "70px"; 
+                        seasonEpaHeader.style.width = "70px";
+                        seasonEpaHeader.style.cursor = "pointer";
+                        seasonEpaHeader.title = "Click to sort highest to lowest";
                         headerRow.appendChild(seasonEpaHeader);
 
                         const eventEpaHeader = document.createElement("th");
                         eventEpaHeader.textContent = "Event EPA Mean";
                         eventEpaHeader.classList.add("tablesorter-header", "epa-header-added"); 
-                        eventEpaHeader.style.width = "70px"; 
+                        eventEpaHeader.style.width = "70px";
+                        eventEpaHeader.style.cursor = "pointer";
+                        eventEpaHeader.title = "Click to sort highest to lowest";
                         headerRow.appendChild(eventEpaHeader);
                     }
+
+                    const sortRowsByEpa = (epaType) => {
+                        const tbody = RankingsTable.querySelector("tbody");
+                        if (!tbody) return;
+
+                        const rows = Array.from(tbody.querySelectorAll("tr"));
+                        const currentKey = RankingsTable.dataset.sortKey;
+                        const currentDirection = RankingsTable.dataset.sortDirection || "desc";
+
+                        const nextDirection = currentKey === epaType && currentDirection === "desc" ? "asc" : "desc";
+                        RankingsTable.dataset.sortKey = epaType;
+                        RankingsTable.dataset.sortDirection = nextDirection;
+
+                        rows.sort((rowA, rowB) => {
+                            const cellA = rowA.querySelector(`td[data-epa-type="${epaType}"]`);
+                            const cellB = rowB.querySelector(`td[data-epa-type="${epaType}"]`);
+
+                            const parseCellValue = (cell) => {
+                                if (!cell || cell.textContent.trim() === "-" || cell.textContent.trim() === "Loading...") {
+                                    return Number.NEGATIVE_INFINITY;
+                                }
+
+                                const value = Number.parseFloat(cell.textContent.replace(/[^0-9.-]/g, ""));
+                                return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
+                            };
+
+                            const valueA = parseCellValue(cellA);
+                            const valueB = parseCellValue(cellB);
+
+                            if (valueA === Number.NEGATIVE_INFINITY && valueB === Number.NEGATIVE_INFINITY) return 0;
+                            if (valueA === Number.NEGATIVE_INFINITY) return 1;
+                            if (valueB === Number.NEGATIVE_INFINITY) return -1;
+
+                            return nextDirection === "desc" ? valueB - valueA : valueA - valueB;
+                        });
+
+                        rows.forEach((row) => tbody.appendChild(row));
+                    };
+
+                    const sortHeaders = headerRow.querySelectorAll(".epa-header-added");
+                    sortHeaders.forEach((header) => {
+                        header.onclick = () => {
+                            const type = header.textContent.includes("Season") ? "season" : "event";
+                            sortRowsByEpa(type);
+                        };
+                    });
 
                     const tableRows = RankingsTable.querySelectorAll("tbody > tr"); 
 
@@ -517,6 +584,7 @@ if (window.location.href.includes("https://www.thebluealliance.com/event/")) {
                         const teamNumber = teamLink.textContent.trim();
 
                         const seasonEpaCell = document.createElement("td");
+                        seasonEpaCell.dataset.epaType = "season";
                         seasonEpaCell.style.padding = "5px 10px";
                         seasonEpaCell.style.border = "1px solid #ddd";
                         seasonEpaCell.style.textAlign = "center";
@@ -525,6 +593,7 @@ if (window.location.href.includes("https://www.thebluealliance.com/event/")) {
                         seasonEpaCell.textContent = "Loading...";
 
                         const eventEpaCell = document.createElement("td");
+                        eventEpaCell.dataset.epaType = "event";
                         eventEpaCell.style.padding = "5px 10px";
                         eventEpaCell.style.border = "1px solid #ddd";
                         eventEpaCell.style.textAlign = "center";
@@ -570,6 +639,25 @@ if (window.location.href.includes("https://www.thebluealliance.com/event/")) {
                     window.location.reload();
                 }
             });
+        }).catch(err => {
+            const eventTitleDiv = document.querySelector("#event-name");
+            if (!eventTitleDiv) return;
+            eventTitleDiv.style.display = "flex";
+            eventTitleDiv.style.flexDirection = "row";
+
+            const errorDiv = document.createElement("div");
+            errorDiv.style.marginLeft = "10px";
+            const errorMsg = document.createElement("p");
+            errorMsg.textContent = "Statbotics API Unavailable";
+            errorMsg.style.backgroundColor = "#D76198";
+            errorMsg.style.padding = "5px 10px";
+            errorMsg.style.fontSize = "15px";
+            errorMsg.style.color = "#ffffff";
+            errorMsg.style.borderRadius = "5px";
+            errorMsg.style.border = "2px solid #000000";
+            errorMsg.style.margin = "0";
+            errorDiv.appendChild(errorMsg);
+            eventTitleDiv.appendChild(errorDiv);
         });
     });
 }
@@ -592,7 +680,8 @@ if (window.location.href.includes("https://www.thebluealliance.com/match/")) {
 
             //console.log(matchData);
 
-            const matchTitleDiv = document.querySelector("#match-title")
+            const matchTitleDiv = document.querySelector("#match-title");
+            if (!matchTitleDiv) return;
             matchTitleDiv.style.display = "flex";
             matchTitleDiv.style.flexDirection = "row";
 
@@ -744,6 +833,25 @@ if (window.location.href.includes("https://www.thebluealliance.com/match/")) {
             }
 
             matchTitleDiv.appendChild(matchDiv);
+        }).catch(err => {
+            const matchTitleDiv = document.querySelector("#match-title");
+            if (!matchTitleDiv) return;
+            matchTitleDiv.style.display = "flex";
+            matchTitleDiv.style.flexDirection = "row";
+
+            const errorDiv = document.createElement("div");
+            errorDiv.style.marginLeft = "10px";
+            const errorMsg = document.createElement("p");
+            errorMsg.textContent = "Statbotics API Unavailable";
+            errorMsg.style.backgroundColor = "#D76198";
+            errorMsg.style.padding = "5px 10px";
+            errorMsg.style.fontSize = "15px";
+            errorMsg.style.color = "#ffffff";
+            errorMsg.style.borderRadius = "5px";
+            errorMsg.style.border = "2px solid #000000";
+            errorMsg.style.margin = "0";
+            errorDiv.appendChild(errorMsg);
+            matchTitleDiv.appendChild(errorDiv);
         });
     });
 }
