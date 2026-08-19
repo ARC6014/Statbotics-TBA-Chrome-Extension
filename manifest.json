@@ -8,15 +8,24 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.thebluealliance.com/team/*"],
+      "matches": [
+        "https://www.thebluealliance.com/team/*",
+        "https://beta.thebluealliance.com/team/*"
+      ],
       "js": ["data.js"]
     },
     {
-      "matches": ["https://www.thebluealliance.com/event/*"],
+      "matches": [
+        "https://www.thebluealliance.com/event/*",
+        "https://beta.thebluealliance.com/event/*"
+      ],
       "js": ["data.js"]
     },
     {
-      "matches": ["https://www.thebluealliance.com/match/*"],
+      "matches": [
+        "https://www.thebluealliance.com/match/*",
+        "https://beta.thebluealliance.com/match/*"
+      ],
       "js": ["data.js"]
     }
   ],
@@ -29,7 +38,8 @@
   "host_permissions": [
     "https://api.statbotics.io/*",
     "https://peekorobo-db-bec52087b7e6.herokuapp.com/*",
-    "https://www.thebluealliance.com/*"
+    "https://www.thebluealliance.com/*",
+    "https://beta.thebluealliance.com/*"
   ],
   "icons": {
     "16": "Arcbotics Logo.png",

@@ -12,6 +12,7 @@ const SOURCE_BOTH = "both";
 const ROOT_ID = "arcbotics-injected-root";
 const MARKER_ATTR = "data-arcbotics";
 const SOURCE_ORDER = [SOURCE_STATBOTICS, SOURCE_PEEKOROBO];
+const TBA_HOSTS = new Set(["www.thebluealliance.com", "beta.thebluealliance.com"]);
 
 const SOURCES = {
     [SOURCE_STATBOTICS]: {
@@ -55,6 +56,9 @@ let currentSettings = {
 };
 let renderGeneration = 0;
 let hashChangeBound = false;
+let domObserverBound = false;
+let domRerunTimer = null;
+let betaHydrationReady = window.location.hostname !== "beta.thebluealliance.com";
 
 function getActiveSources() {
     if (currentSettings.dataSource === SOURCE_BOTH) {
@@ -336,6 +340,23 @@ function cleanSegment(value) {
     return (value || "").split("#")[0].split("?")[0];
 }
 
+function findTitleContainer(legacySelector, betaHeadingSelector = "h1", attachToHeading = false) {
+    const legacyContainer = document.querySelector(legacySelector);
+    if (legacyContainer) return legacyContainer;
+    if (window.location.hostname !== "beta.thebluealliance.com") return null;
+    const heading = document.querySelector(betaHeadingSelector);
+    if (!heading) return null;
+    if (attachToHeading) {
+        const existingHost = heading.nextElementSibling;
+        if (existingHost?.getAttribute(MARKER_ATTR) === "1") return existingHost;
+        const host = document.createElement("div");
+        host.setAttribute(MARKER_ATTR, "1");
+        heading.insertAdjacentElement("afterend", host);
+        return host;
+    }
+    return heading.parentElement || null;
+}
+
 async function loadTeamStats(teamNumber, year, source) {
     if (source.id === SOURCE_PEEKOROBO) {
         const data = await fetchJson(
@@ -557,7 +578,7 @@ function renderTeamPage(generation) {
     const teamIndex = urlParts.indexOf("team") + 1;
     const teamNumber = cleanSegment(urlParts[teamIndex]);
     const year = cleanSegment(urlParts[teamIndex + 1]) || new Date().getFullYear();
-    const teamTitleDiv = document.querySelector("#team-title");
+    const teamTitleDiv = findTitleContainer("#team-title", "#team-info h1");
     if (!teamTitleDiv) return;
 
     const rows = startSourceLayout(teamTitleDiv, sources, (source) => (
@@ -611,9 +632,38 @@ function addRatingHeader(headerRow, source, kind) {
     headerRow.appendChild(header);
 }
 
+function findRankingsTable() {
+    const legacyTable = document.querySelector("#rankingsTable");
+    if (legacyTable) return legacyTable;
+    if (window.location.hostname !== "beta.thebluealliance.com") return null;
+
+    const visiblePanels = Array.from(document.querySelectorAll('[role="tabpanel"]'))
+        .filter((panel) => !panel.hidden && !panel.hasAttribute("data-hidden"));
+    return visiblePanels
+        .flatMap((panel) => Array.from(panel.querySelectorAll("table")))
+        .find((table) => table.querySelector("thead")
+            && table.querySelector('tbody a[href*="/team/"]')) || null;
+}
+
+function waitForRankingsTable(eventID, sources) {
+    const table = findRankingsTable();
+    if (table) {
+        enhanceRankingsTable(eventID, sources);
+        return;
+    }
+
+    const observer = new MutationObserver(() => {
+        if (!findRankingsTable()) return;
+        observer.disconnect();
+        enhanceRankingsTable(eventID, sources);
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    setTimeout(() => observer.disconnect(), 10000);
+}
+
 function enhanceRankingsTable(eventID, sources) {
     sendGetRequestForAwardsInfo(eventID).then((awardsData) => {
-        const RankingsTable = document.querySelector("#rankingsTable");
+        const RankingsTable = findRankingsTable();
         if (!RankingsTable) return;
 
         const headerRow = RankingsTable.querySelector("thead tr");
@@ -630,7 +680,7 @@ function enhanceRankingsTable(eventID, sources) {
         const awardSource = sources[0] || SOURCES[SOURCE_PEEKOROBO];
         for (let i = 0; i < tableRows.length; i++) {
             const currentRow = tableRows[i];
-            const teamLink = currentRow.querySelector("td:nth-child(2) a");
+            const teamLink = currentRow.querySelector('a[href*="/team/"]');
             if (!teamLink) continue;
 
             const teamNumber = teamLink.textContent.trim();
@@ -653,7 +703,7 @@ function enhanceRankingsTable(eventID, sources) {
         }
     }).catch(() => {});
 
-    const RankingsTable = document.querySelector("#rankingsTable");
+    const RankingsTable = findRankingsTable();
     if (!RankingsTable) return;
 
     const headerRow = RankingsTable.querySelector("thead tr");
@@ -710,7 +760,7 @@ function enhanceRankingsTable(eventID, sources) {
 
     for (let i = 0; i < tableRows.length; i++) {
         const currentRow = tableRows[i];
-        const teamLink = currentRow.querySelector("td:nth-child(2) a");
+        const teamLink = currentRow.querySelector('a[href*="/team/"]');
         if (!teamLink) continue;
 
         const teamNumber = teamLink.textContent.trim();
@@ -798,19 +848,32 @@ function appendEventPills(row, source, eventStats, error) {
     }
 }
 
+function bindBetaRankingsTab(eventID, sources) {
+    const rankingsTab = Array.from(document.querySelectorAll('[role="tab"]'))
+        .find((tab) => tab.textContent.trim() === "Rankings");
+    if (!rankingsTab || rankingsTab.dataset.arcboticsRankingsBound === "1") return;
+
+    rankingsTab.dataset.arcboticsRankingsBound = "1";
+    rankingsTab.addEventListener("click", () => {
+        waitForRankingsTable(eventID, sources);
+    });
+}
+
 function renderEventPage(generation) {
     const sources = getActiveSources();
     const urlParts = parsePageParts();
     const eventIndex = urlParts.indexOf("event") + 1;
     const eventID = cleanSegment(urlParts[eventIndex]);
-    const eventTitleDiv = document.querySelector("#event-name");
+    const eventTitleDiv = findTitleContainer("#event-name");
     if (!eventTitleDiv) return;
 
     const rows = startSourceLayout(eventTitleDiv, sources, (source) => (
         createLinkButton(source, source.eventUrl(eventID))
     ));
 
-    if (window.location.hash === "#rankings") {
+    if (window.location.hostname === "beta.thebluealliance.com") {
+        bindBetaRankingsTab(eventID, sources);
+    } else if (window.location.hash === "#rankings") {
         enhanceRankingsTable(eventID, sources);
     }
 
@@ -883,7 +946,7 @@ function renderMatchPage(generation) {
     const urlParts = parsePageParts();
     const matchIndex = urlParts.indexOf("match") + 1;
     const matchID = cleanSegment(urlParts[matchIndex]);
-    const matchTitleDiv = document.querySelector("#match-title");
+    const matchTitleDiv = findTitleContainer("#match-title", "h1", true);
     if (!matchTitleDiv) return;
 
     const rows = startSourceLayout(matchTitleDiv, sources, (source) => (
@@ -907,21 +970,54 @@ function renderMatchPage(generation) {
 function runForPage() {
     renderGeneration += 1;
     if (!currentSettings.extensionActive) return;
-    const href = window.location.href;
-    if (href.includes("https://www.thebluealliance.com/team/")) {
+    if (!betaHydrationReady) return;
+    if (document.getElementById(ROOT_ID)) return;
+    const path = window.location.pathname;
+    if (!TBA_HOSTS.has(window.location.hostname)) return;
+    if (path.startsWith("/team/")) {
         renderTeamPage(renderGeneration);
-    } else if (href.includes("https://www.thebluealliance.com/event/")) {
+    } else if (path.startsWith("/event/")) {
         renderEventPage(renderGeneration);
-    } else if (href.includes("https://www.thebluealliance.com/match/")) {
+    } else if (path.startsWith("/match/")) {
         renderMatchPage(renderGeneration);
     }
 }
 
+function bindDomObserver() {
+    if (domObserverBound) return;
+    const target = document.documentElement;
+    if (!target) return;
+
+    domObserverBound = true;
+    const observer = new MutationObserver(() => {
+        if (!betaHydrationReady || !currentSettings.extensionActive || document.getElementById(ROOT_ID)) return;
+        if (!TBA_HOSTS.has(window.location.hostname)) return;
+        if (!window.location.pathname.startsWith("/team/")
+            && !window.location.pathname.startsWith("/event/")
+            && !window.location.pathname.startsWith("/match/")) return;
+        if (domRerunTimer !== null) return;
+
+        domRerunTimer = setTimeout(() => {
+            domRerunTimer = null;
+            runForPage();
+        }, 0);
+    });
+    observer.observe(target, { childList: true, subtree: true });
+}
+
 function init() {
+    bindDomObserver();
     chrome.storage.local.get(
         { extensionActive: true, dataSource: SOURCE_PEEKOROBO },
         (settings) => {
             currentSettings = settings;
+            if (window.location.hostname === "beta.thebluealliance.com") {
+                setTimeout(() => {
+                    betaHydrationReady = true;
+                    runForPage();
+                }, 1000);
+                return;
+            }
             runForPage();
         }
     );
