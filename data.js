@@ -1,857 +1,946 @@
-let config = {
+const config = {
     TBA_API_KEY: "Lkhnl56wDJBdPirtd4tjhQLibg8ZKkaMjuNUY9eaKqOnJhJQgtIklsIBPUCPbApP",
     STATBOTICS_API_URL: "https://api.statbotics.io/v3",
+    PEEKOROBO_API_URL: "https://peekorobo-db-bec52087b7e6.herokuapp.com",
+    PEEKOROBO_SITE_URL: "https://www.peekorobo.com",
     TBA_API_URL: "https://www.thebluealliance.com/api/v3"
 };
 
-let addInfoPopupStatbotics = (element) => {
-    element.style.position = 'relative';
-    element.style.cursor = 'help';
+const SOURCE_STATBOTICS = "statbotics";
+const SOURCE_PEEKOROBO = "peekorobo";
+const SOURCE_BOTH = "both";
+const ROOT_ID = "arcbotics-injected-root";
+const MARKER_ATTR = "data-arcbotics";
+const SOURCE_ORDER = [SOURCE_STATBOTICS, SOURCE_PEEKOROBO];
 
-    const infoBoxStatbotics = document.createElement('div');
-    infoBoxStatbotics.textContent = 'Data retrieved from Statbotics';
-    infoBoxStatbotics.style.visibility = 'hidden';
-    infoBoxStatbotics.style.position = 'absolute';
-    infoBoxStatbotics.style.bottom = '120%';
-    infoBoxStatbotics.style.left = '50%';
-    infoBoxStatbotics.style.transform = 'translateX(-50%)';
-    infoBoxStatbotics.style.backgroundColor = '#1c1c1c';
-    infoBoxStatbotics.style.color = '#ffffff';
-    infoBoxStatbotics.style.padding = '5px 10px';
-    infoBoxStatbotics.style.borderRadius = '4px';
-    infoBoxStatbotics.style.fontSize = '12px';
-    infoBoxStatbotics.style.whiteSpace = 'nowrap';
-    infoBoxStatbotics.style.zIndex = '1000';
-    infoBoxStatbotics.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+const SOURCES = {
+    [SOURCE_STATBOTICS]: {
+        id: SOURCE_STATBOTICS,
+        name: "Statbotics",
+        ratingName: "EPA",
+        tooltip: "Data retrieved from Statbotics",
+        color: "#D76198",
+        textColor: "#ffffff",
+        linkColor: "#940847",
+        linkTextColor: "#ffffff",
+        tableColor: "#73176d",
+        teamUrl: (teamNumber) => `https://www.statbotics.io/team/${teamNumber}`,
+        eventUrl: (eventID) => `https://www.statbotics.io/event/${eventID}`,
+        matchUrl: (matchID) => `https://www.statbotics.io/match/${matchID}`,
+        linkLabel: "Statbotics Page"
+    },
+    [SOURCE_PEEKOROBO]: {
+        id: SOURCE_PEEKOROBO,
+        name: "Peekorobo",
+        ratingName: "ACE",
+        tooltip: "Data retrieved from Peekorobo",
+        color: "#1a1a1a",
+        textColor: "#ffdd00",
+        linkColor: "#ffdd00",
+        linkTextColor: "#1a1a1a",
+        tableColor: "#7a5a00",
+        teamUrl: (teamNumber, year) => `${config.PEEKOROBO_SITE_URL}/team/${teamNumber}/${year}`,
+        eventUrl: (eventID) => `${config.PEEKOROBO_SITE_URL}/event/${eventID}`,
+        matchUrl: (matchID) => {
+            const eventKey = String(matchID).split("_")[0];
+            return `${config.PEEKOROBO_SITE_URL}/match/${eventKey}/${matchID}`;
+        },
+        linkLabel: "Peekorobo Page"
+    }
+};
 
-    element.appendChild(infoBoxStatbotics);
+let currentSettings = {
+    extensionActive: true,
+    dataSource: SOURCE_PEEKOROBO
+};
+let renderGeneration = 0;
+let hashChangeBound = false;
 
-    element.addEventListener('mouseenter', () => {
-        infoBoxStatbotics.style.visibility = 'visible';
+function getActiveSources() {
+    if (currentSettings.dataSource === SOURCE_BOTH) {
+        return SOURCE_ORDER.map((id) => SOURCES[id]);
+    }
+    return [SOURCES[currentSettings.dataSource] || SOURCES[SOURCE_PEEKOROBO]];
+}
+
+function isBothMode() {
+    return currentSettings.dataSource === SOURCE_BOTH;
+}
+
+function applyPillStyle(element, source, options = {}) {
+    const background = options.background || source.color;
+    const color = options.color || source.textColor;
+    element.style.backgroundColor = background;
+    element.style.padding = "5px 10px";
+    element.style.fontSize = "15px";
+    element.style.color = color;
+    element.style.borderRadius = "5px";
+    element.style.border = "2px solid #000000";
+    element.style.margin = "0";
+}
+
+function addInfoPopup(element, text) {
+    element.style.position = "relative";
+    element.style.cursor = "help";
+
+    const infoBox = document.createElement("div");
+    infoBox.textContent = text;
+    infoBox.style.visibility = "hidden";
+    infoBox.style.position = "absolute";
+    infoBox.style.bottom = "120%";
+    infoBox.style.left = "50%";
+    infoBox.style.transform = "translateX(-50%)";
+    infoBox.style.backgroundColor = "#1c1c1c";
+    infoBox.style.color = "#ffffff";
+    infoBox.style.padding = "5px 10px";
+    infoBox.style.borderRadius = "4px";
+    infoBox.style.fontSize = "12px";
+    infoBox.style.whiteSpace = "nowrap";
+    infoBox.style.zIndex = "1000";
+    infoBox.style.boxShadow = "0 2px 4px rgba(0,0,0,0.2)";
+    infoBox.setAttribute(MARKER_ATTR, "1");
+
+    element.appendChild(infoBox);
+
+    element.addEventListener("mouseenter", () => {
+        infoBox.style.visibility = "visible";
     });
-
-    element.addEventListener('mouseleave', () => {
-        infoBoxStatbotics.style.visibility = 'hidden';
+    element.addEventListener("mouseleave", () => {
+        infoBox.style.visibility = "hidden";
     });
 }
 
-let addInfoPopupTBA = (element) => {
-    element.style.position = 'relative';
-    element.style.cursor = 'help';
+function createPill(text, source, className) {
+    const pill = document.createElement("p");
+    pill.className = className;
+    pill.textContent = text;
+    applyPillStyle(pill, source);
+    addInfoPopup(pill, source.tooltip);
+    return pill;
+}
 
-    const infoBoxTBA = document.createElement('div');
-    infoBoxTBA.textContent = 'Data retrieved from TBA API';
-    infoBoxTBA.style.visibility = 'hidden';
-    infoBoxTBA.style.position = 'absolute';
-    infoBoxTBA.style.bottom = '120%';
-    infoBoxTBA.style.left = '50%';
-    infoBoxTBA.style.transform = 'translateX(-50%)';
-    infoBoxTBA.style.backgroundColor = '#1c1c1c';
-    infoBoxTBA.style.color = '#ffffff';
-    infoBoxTBA.style.padding = '5px 10px';
-    infoBoxTBA.style.borderRadius = '4px';
-    infoBoxTBA.style.fontSize = '12px';
-    infoBoxTBA.style.whiteSpace = 'nowrap';
-    infoBoxTBA.style.zIndex = '1000';
-    infoBoxTBA.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
-
-    element.appendChild(infoBoxTBA);
-
-    element.addEventListener('mouseenter', () => {
-        infoBoxTBA.style.visibility = 'visible';
+function styleHoverButton(button) {
+    button.addEventListener("mouseenter", () => {
+        button.style.opacity = "0.8";
     });
-
-    element.addEventListener('mouseleave', () => {
-        infoBoxTBA.style.visibility = 'hidden';
+    button.addEventListener("mouseleave", () => {
+        button.style.opacity = "1.0";
+    });
+    button.addEventListener("mousedown", () => {
+        button.style.opacity = "0.6";
+    });
+    button.addEventListener("mouseup", () => {
+        button.style.opacity = "0.8";
     });
 }
 
-function checkAndExecute(callback) {
-    // Run by default unless explicitly disabled
-    callback();
+function createLinkButton(source, url) {
+    const button = document.createElement("button");
+    button.className = "extension-source-link";
+    button.textContent = source.linkLabel;
+    button.onclick = () => window.open(url, "_blank");
+    applyPillStyle(button, source, {
+        background: source.linkColor,
+        color: source.linkTextColor
+    });
+    styleHoverButton(button);
+    return button;
 }
 
-if (window.location.href.includes("https://www.thebluealliance.com/team/")) {
-    checkAndExecute(() => {
-        let urlParts = window.location.href.split("/").filter(Boolean); 
+function createFlexRow(className) {
+    const row = document.createElement("div");
+    if (className) row.className = className;
+    row.style.display = "flex";
+    row.style.flexDirection = "row";
+    row.style.flexWrap = "wrap";
+    row.style.justifyContent = "center";
+    row.style.alignItems = "center";
+    row.style.gap = "10px";
+    return row;
+}
 
-        let teamIndex = urlParts.indexOf("team") + 1;
-        let teamNumber = urlParts[teamIndex];
-        let year = urlParts[teamIndex + 1] || new Date().getFullYear();
+function createSourceToggle() {
+    const wrap = document.createElement("div");
+    wrap.className = "extension-source-toggle";
+    wrap.style.display = "flex";
+    wrap.style.flexDirection = "row";
+    wrap.style.gap = "6px";
+    wrap.style.alignItems = "center";
 
-        let sendGetRequestForTeamInfo = async (teamNumber, year) => {
-            let response = await fetch(`${config.STATBOTICS_API_URL}/team_year/${teamNumber}/${year}`);
-            let data = await response.json();
-            return data;
-        };
+    const options = [
+        { id: SOURCE_STATBOTICS, name: "Statbotics", background: "#940847", color: "#ffffff" },
+        { id: SOURCE_PEEKOROBO, name: "Peekorobo", background: "#ffdd00", color: "#1a1a1a" },
+        { id: SOURCE_BOTH, name: "Both", background: "#3366CC", color: "#ffffff" }
+    ];
 
-        sendGetRequestForTeamInfo(teamNumber, year).then(data => {
-            const teamData = data;
-
-            //console.log(teamData);
-
-            const teamTitleDiv = document.querySelector("#team-title");
-            if (!teamTitleDiv) return;
-            teamTitleDiv.style.display = "flex";
-            teamTitleDiv.style.flexDirection = "row";
-
-            const teamDiv = document.createElement("div");
-            teamDiv.className = "extension-statbotics-team-div";
-            teamDiv.style.display = "flex";
-            teamDiv.style.flexDirection = "column";
-            teamDiv.style.justifyContent = "center";  
-            teamDiv.style.alignItems = "center";     
-            teamDiv.style.marginLeft = "10px";
-            teamDiv.style.gap = "7px";
-
-            const upDiv = document.createElement("div");
-            upDiv.className = "up-div";
-            upDiv.style.display = "flex";
-            upDiv.style.flexDirection = "row";
-            upDiv.style.justifyContent = "center";  
-            upDiv.style.alignItems = "center";     
-            upDiv.style.gap = "10px";
-
-            const downDiv = document.createElement("div");
-            downDiv.className = "down-div";
-            downDiv.style.display = "flex";
-            downDiv.style.flexDirection = "row";
-            downDiv.style.justifyContent = "center";  
-            downDiv.style.alignItems = "center";     
-            downDiv.style.gap = "10px";
-
-            if (teamData.epa && teamData.record) {
-                const globalRank = document.createElement("p");
-                globalRank.className = "extension-statbotics-rank";
-                globalRank.textContent = `Global EPA Rank: ${teamData.epa.ranks.total.rank}`;
-                globalRank.style.backgroundColor = "#D76198";
-                globalRank.style.padding = "5px 10px";
-                globalRank.style.fontSize = "15px";
-                globalRank.style.color = "#ffffff";
-                globalRank.style.borderRadius = "5px";
-                globalRank.style.border = "2px solid #000000";
-                globalRank.style.margin = "0";
-
-                const totalEpa = document.createElement("p");
-                totalEpa.className = "extension-statbotics-total-epa";
-                totalEpa.textContent = `Total EPA Mean: ${teamData.epa.total_points.mean}`;
-                totalEpa.style.backgroundColor = "#D76198";
-                totalEpa.style.padding = "5px 10px";
-                totalEpa.style.fontSize = "15px";
-                totalEpa.style.color = "#ffffff";
-                totalEpa.style.borderRadius = "5px";
-                totalEpa.style.border = "2px solid #000000";
-                totalEpa.style.margin = "0";
-
-                const epaPercentile = document.createElement("p");
-                epaPercentile.className = "extension-statbotics-epa-percentile";
-                epaPercentile.textContent = `EPA Percentile: ${teamData.epa.ranks.total.percentile}`;
-                epaPercentile.style.backgroundColor = "#D76198";
-                epaPercentile.style.padding = "5px 10px";
-                epaPercentile.style.fontSize = "15px";
-                epaPercentile.style.color = "#ffffff";
-                epaPercentile.style.borderRadius = "5px";
-                epaPercentile.style.border = "2px solid #000000";
-                epaPercentile.style.margin = "0";
-
-                const winNo = document.createElement("p");
-                winNo.className = "extension-statbotics-win";
-                winNo.textContent = `Number Of Wins: ${teamData.record.wins}`;
-                winNo.style.backgroundColor = "#D76198";
-                winNo.style.padding = "5px 10px";
-                winNo.style.fontSize = "15px";
-                winNo.style.color = "#ffffff";
-                winNo.style.borderRadius = "5px";
-                winNo.style.border = "2px solid #000000";
-                winNo.style.margin = "0";
-
-                const lossNo = document.createElement("p");
-                lossNo.className = "extension-statbotics-loss";
-                lossNo.textContent = `Number Of Losses: ${teamData.record.losses}`;
-                lossNo.style.backgroundColor = "#D76198";
-                lossNo.style.padding = "5px 10px";
-                lossNo.style.fontSize = "15px";
-                lossNo.style.color = "#ffffff";
-                lossNo.style.borderRadius = "5px";
-                lossNo.style.border = "2px solid #000000";
-                lossNo.style.margin = "0";
-
-                const winRate = document.createElement("p");
-                winRate.className = "extension-statbotics-winrate";
-                winRate.textContent = `Winrate: ${teamData.record.winrate}`;
-                winRate.style.backgroundColor = "#D76198";
-                winRate.style.padding = "5px 10px";
-                winRate.style.fontSize = "15px";
-                winRate.style.color = "#ffffff";
-                winRate.style.borderRadius = "5px";
-                winRate.style.border = "2px solid #000000";
-                winRate.style.margin = "0";
-
-                upDiv.appendChild(globalRank);
-                upDiv.appendChild(totalEpa);
-                upDiv.appendChild(epaPercentile);
-                downDiv.appendChild(winNo);
-                downDiv.appendChild(lossNo);
-                downDiv.appendChild(winRate);
-
-                teamDiv.appendChild(upDiv);
-                teamDiv.appendChild(downDiv);
-
-                addInfoPopupStatbotics(globalRank);
-                addInfoPopupStatbotics(totalEpa);
-                addInfoPopupStatbotics(epaPercentile);
-                addInfoPopupStatbotics(winNo);
-                addInfoPopupStatbotics(lossNo);
-                addInfoPopupStatbotics(winRate);   
-            }
-
-            if (!teamData.epa || !teamData.record) {
-                const warning = document.createElement("p");
-                warning.className = "extension-statbotics-warning";
-                warning.textContent = "No Info Available For This Season/Team";
-                warning.style.backgroundColor = "#D76198";
-                warning.style.padding = "5px 10px";
-                warning.style.fontSize = "15px";
-                warning.style.color = "#ffffff";
-                warning.style.borderRadius = "5px";
-                warning.style.border = "2px solid #000000";
-                warning.style.margin = "0";
-
-                teamDiv.appendChild(warning);
-            }
-
-            const statboticsLink = document.createElement("button");
-            statboticsLink.className = "extension-statbotics-rank";
-            statboticsLink.textContent = `Statbotics Page`;
-            statboticsLink.onclick = () => {
-                window.open(`https://www.statbotics.io/team/${teamNumber}`, '_blank');
-            };
-            statboticsLink.style.backgroundColor = "#940847ff";
-            statboticsLink.style.padding = "5px 10px";
-            statboticsLink.style.fontSize = "15px";
-            statboticsLink.style.color = "#ffffff";
-            statboticsLink.style.borderRadius = "5px";
-            statboticsLink.style.border = "2px solid #000000";
-            statboticsLink.style.margin = "0";
-            statboticsLink.addEventListener("mouseenter", () => {
-                statboticsLink.style.opacity = "0.8";
-            });
-
-            statboticsLink.addEventListener("mouseleave", () => {
-                statboticsLink.style.opacity = "1.0"; 
-            });
-
-            statboticsLink.addEventListener("mousedown", () => {
-                statboticsLink.style.opacity = "0.6";
-            });
-
-            statboticsLink.addEventListener("mouseup", () => {
-                statboticsLink.style.opacity = "0.8"; 
-            });
-
-            teamDiv.appendChild(statboticsLink);
-
-            teamTitleDiv.appendChild(teamDiv);
-        }).catch(err => {
-            const teamTitleDiv = document.querySelector("#team-title");
-            if (!teamTitleDiv) return;
-            teamTitleDiv.style.display = "flex";
-            teamTitleDiv.style.flexDirection = "row";
-
-            const errorDiv = document.createElement("div");
-            errorDiv.style.marginLeft = "10px";
-            const errorMsg = document.createElement("p");
-            errorMsg.textContent = "Statbotics API Unavailable";
-            errorMsg.style.backgroundColor = "#D76198";
-            errorMsg.style.padding = "5px 10px";
-            errorMsg.style.fontSize = "15px";
-            errorMsg.style.color = "#ffffff";
-            errorMsg.style.borderRadius = "5px";
-            errorMsg.style.border = "2px solid #000000";
-            errorMsg.style.margin = "0";
-            errorDiv.appendChild(errorMsg);
-            teamTitleDiv.appendChild(errorDiv);
+    options.forEach((option) => {
+        const button = document.createElement("button");
+        button.textContent = option.name;
+        button.type = "button";
+        const active = currentSettings.dataSource === option.id;
+        applyPillStyle(button, SOURCES[SOURCE_PEEKOROBO], {
+            background: active ? option.background : "#6b6b6b",
+            color: active ? option.color : "#ffffff"
         });
+        button.style.fontSize = "13px";
+        button.style.cursor = "pointer";
+        button.style.opacity = active ? "1" : "0.7";
+        button.disabled = active;
+        button.onclick = () => {
+            chrome.storage.local.set({ dataSource: option.id });
+        };
+        styleHoverButton(button);
+        wrap.appendChild(button);
     });
+
+    return wrap;
 }
 
-if (window.location.href.includes("https://www.thebluealliance.com/event/")) {
-    checkAndExecute(() => {
+function createLayout() {
+    const root = document.createElement("div");
+    root.id = ROOT_ID;
+    root.setAttribute(MARKER_ATTR, "1");
+    root.style.display = "flex";
+    root.style.flexDirection = "column";
+    root.style.justifyContent = "center";
+    root.style.alignItems = "center";
+    root.style.marginLeft = "10px";
+    root.style.gap = "7px";
 
-        let sendGetRequestForEventInfo = async (eventID) => {
-            let response = await fetch(`${config.STATBOTICS_API_URL}/event/${eventID}`);
-            let data = await response.json();
-            return data;
+    const downDiv = createFlexRow("down-div");
+    root.appendChild(downDiv);
+    return {
+        root,
+        downDiv,
+        addRow() {
+            const row = createFlexRow();
+            root.insertBefore(row, downDiv);
+            return row;
+        }
+    };
+}
+
+function attachRoot(parent) {
+    parent.style.display = "flex";
+    parent.style.flexDirection = "row";
+    parent.style.flexWrap = "wrap";
+    parent.style.alignItems = "center";
+    const layout = createLayout();
+    parent.appendChild(layout.root);
+    return layout;
+}
+
+function clearInjected() {
+    document.getElementById(ROOT_ID)?.remove();
+    document.querySelectorAll(`[${MARKER_ATTR}]`).forEach((el) => el.remove());
+}
+
+function formatNumber(value, digits = 2) {
+    if (value === undefined || value === null || value === "") return null;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    return Number.isInteger(n) ? String(n) : n.toFixed(digits);
+}
+
+function formatWinrate(value) {
+    if (value === undefined || value === null || value === "") return null;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    return n.toFixed(3);
+}
+
+function formatPercentile(value) {
+    if (value === undefined || value === null || value === "") return null;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    if (n > 1) return n.toFixed(3);
+    return n.toFixed(4);
+}
+
+function acePercentile(rank, count) {
+    if (!rank || !count) return null;
+    return (count - rank + 1) / count;
+}
+
+function peekoroboWinrate(wins, losses, ties) {
+    const w = Number(wins) || 0;
+    const l = Number(losses) || 0;
+    const t = Number(ties) || 0;
+    const total = w + l + t;
+    if (!total) return null;
+    return w / total;
+}
+
+const FETCH_TIMEOUT_MS = 8000;
+
+async function fetchJson(url, options = {}) {
+    const request = chrome.runtime.sendMessage({
+        type: "fetchJson",
+        url,
+        headers: options.headers || {}
+    });
+    const timeout = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Request timed out")), FETCH_TIMEOUT_MS + 1000);
+    });
+    const result = await Promise.race([request, timeout]);
+    if (chrome.runtime.lastError) {
+        throw new Error(chrome.runtime.lastError.message);
+    }
+    if (!result || !result.ok) {
+        throw new Error((result && result.error) || "Request failed");
+    }
+    return result.data;
+}
+
+function appendSourceLabel(row, source) {
+    if (!isBothMode()) return;
+    row.appendChild(createPill(source.name, source, "extension-source-label"));
+}
+
+function appendUnavailable(row, source) {
+    appendSourceLabel(row, source);
+    row.appendChild(createPill(
+        `${source.name} API Unavailable`,
+        source,
+        "extension-statbotics-warning"
+    ));
+}
+
+function appendLoading(row, source) {
+    appendSourceLabel(row, source);
+    row.appendChild(createPill(
+        `Loading ${source.name}...`,
+        source,
+        "extension-statbotics-warning"
+    ));
+}
+
+function startSourceLayout(parent, sources, makeLink) {
+    const layout = attachRoot(parent);
+    const rows = {};
+    sources.forEach((source) => {
+        const row = layout.addRow();
+        rows[source.id] = row;
+        appendLoading(row, source);
+        layout.downDiv.appendChild(makeLink(source));
+    });
+    layout.downDiv.appendChild(createSourceToggle());
+    return rows;
+}
+
+function parsePageParts() {
+    return window.location.href.split("/").filter(Boolean);
+}
+
+function cleanSegment(value) {
+    return (value || "").split("#")[0].split("?")[0];
+}
+
+async function loadTeamStats(teamNumber, year, source) {
+    if (source.id === SOURCE_PEEKOROBO) {
+        const data = await fetchJson(
+            `${config.PEEKOROBO_API_URL}/team_perfs/${teamNumber}?year=${year}`
+        );
+        const perf = data.team_perfs && data.team_perfs[0];
+        if (!perf) return { available: false };
+        return {
+            available: true,
+            globalRank: perf.rank_global,
+            rating: perf.ace,
+            percentile: acePercentile(perf.rank_global, perf.count_global),
+            wins: perf.wins,
+            losses: perf.losses,
+            winrate: peekoroboWinrate(perf.wins, perf.losses, perf.ties)
         };
+    }
 
-        let sendGetRequestForTeamInfo = async (teamNumber, year) => {
-            let response = await fetch(`${config.STATBOTICS_API_URL}/team_year/${teamNumber}/${year}`);
-            let data = await response.json();
-            return data;
-        };
+    const data = await fetchJson(
+        `${config.STATBOTICS_API_URL}/team_year/${teamNumber}/${year}`
+    );
+    if (!data.epa || !data.record) return { available: false };
+    return {
+        available: true,
+        globalRank: data.epa.ranks && data.epa.ranks.total && data.epa.ranks.total.rank,
+        rating: data.epa.total_points && data.epa.total_points.mean,
+        percentile: data.epa.ranks && data.epa.ranks.total && data.epa.ranks.total.percentile,
+        wins: data.record.wins,
+        losses: data.record.losses,
+        winrate: data.record.winrate
+    };
+}
 
-        let sendGetRequestForTeamInfoForEvent = async (teamNumber, event) => {
-            let response = await fetch(`${config.STATBOTICS_API_URL}/team_event/${teamNumber}/${event}`);
-            let data = await response.json();
-            return data;
-        };
-
-        let sendGetRequestForAwardsInfo = async (eventID) => {
-            let eventIDSplit = eventID.split("#")[0];
-            let response = await fetch(`${config.TBA_API_URL}/event/${eventIDSplit}/awards`, {
-                headers: {
-                    'X-TBA-Auth-Key': config.TBA_API_KEY
-                }
-            });
-            let data = await response.json();
-            return data;
-        };
-
-        let urlParts = window.location.href.split("/").filter(Boolean); 
-        let eventIndex = urlParts.indexOf("event") + 1;
-        let eventID = urlParts[eventIndex];
-
-        sendGetRequestForEventInfo(eventID).then(data => {
-            const eventData = data;
-
-            //console.log(eventData);
-
-            const eventTitleDiv = document.querySelector("#event-name")
-            eventTitleDiv.style.display = "flex";
-            eventTitleDiv.style.flexDirection = "row";
-
-            const eventDiv = document.createElement("div");
-            eventDiv.className = "extension-statbotics-event-div";
-            eventDiv.style.display = "flex";
-            eventDiv.style.flexDirection = "column";
-            eventDiv.style.justifyContent = "center";  
-            eventDiv.style.alignItems = "center";     
-            eventDiv.style.marginLeft = "10px";
-            eventDiv.style.gap = "7px";
-
-            const upDiv = document.createElement("div");
-            upDiv.className = "up-div";
-            upDiv.style.display = "flex";
-            upDiv.style.flexDirection = "row";
-            upDiv.style.justifyContent = "center";  
-            upDiv.style.alignItems = "center";     
-            upDiv.style.gap = "10px";
-
-            const downDiv = document.createElement("div");
-            downDiv.className = "down-div";
-            downDiv.style.display = "flex";
-            downDiv.style.flexDirection = "row";
-            downDiv.style.justifyContent = "center";  
-            downDiv.style.alignItems = "center";     
-            downDiv.style.gap = "10px";
-
-            if (eventData.status_str) {
-                const eventStatus = document.createElement("p");
-                eventStatus.className = "extension-statbotics-event-status";
-                eventStatus.textContent = `Event Status: ${eventData.status_str}`;
-                eventStatus.style.backgroundColor = "#D76198";
-                eventStatus.style.padding = "5px 10px";
-                eventStatus.style.fontSize = "15px";
-                eventStatus.style.color = "#ffffff";
-                eventStatus.style.borderRadius = "5px";
-                eventStatus.style.border = "2px solid #000000";
-                eventStatus.style.margin = "0";
-
-                upDiv.appendChild(eventStatus);
-                addInfoPopupStatbotics(eventStatus);
-            }
-
-            if (!eventData.status_str) {
-                const eventStatus = document.createElement("p");
-                eventStatus.className = "extension-statbotics-event-status";
-                eventStatus.textContent = "Upcoming Event";
-                eventStatus.style.backgroundColor = "#D76198";
-                eventStatus.style.padding = "5px 10px";
-                eventStatus.style.fontSize = "15px";
-                eventStatus.style.color = "#ffffff";
-                eventStatus.style.borderRadius = "5px";
-                eventStatus.style.border = "2px solid #000000";
-                eventStatus.style.margin = "0";
-
-                upDiv.appendChild(eventStatus);
-                addInfoPopupStatbotics(eventStatus);
-            }
-
-            if (eventData.epa && eventData.epa.max) {
-                const maxEpa = document.createElement("p");
-                maxEpa.className = "extension-statbotics-max-epa";
-                maxEpa.textContent = `Max EPA: ${eventData.epa.max}`;
-                maxEpa.style.backgroundColor = "#D76198";
-                maxEpa.style.padding = "5px 10px";
-                maxEpa.style.fontSize = "15px";
-                maxEpa.style.color = "#ffffff";
-                maxEpa.style.borderRadius = "5px";
-                maxEpa.style.border = "2px solid #000000";
-                maxEpa.style.margin = "0";
-
-                upDiv.appendChild(maxEpa);
-                addInfoPopupStatbotics(maxEpa);
-            }
-
-            if (eventData.epa && eventData.epa.max) {
-                const meanEPA = document.createElement("p");
-                meanEPA.className = "extension-statbotics-max-epa";
-                meanEPA.textContent = `Mean EPA: ${eventData.epa.mean}`;
-                meanEPA.style.backgroundColor = "#D76198";
-                meanEPA.style.padding = "5px 10px";
-                meanEPA.style.fontSize = "15px";
-                meanEPA.style.color = "#ffffff";
-                meanEPA.style.borderRadius = "5px";
-                meanEPA.style.border = "2px solid #000000";
-                meanEPA.style.margin = "0";
-
-                upDiv.appendChild(meanEPA);
-                addInfoPopupStatbotics(meanEPA);
-            }
-
-            const statboticsLink = document.createElement("button");
-            statboticsLink.className = "extension-statbotics-rank";
-            statboticsLink.textContent = `Statbotics Page`;
-            statboticsLink.onclick = () => {
-                window.open(`https://www.statbotics.io/event/${eventID}`, '_blank');
-            };
-            statboticsLink.style.backgroundColor = "#940847ff";
-            statboticsLink.style.padding = "5px 10px";
-            statboticsLink.style.fontSize = "15px";
-            statboticsLink.style.color = "#ffffff";
-            statboticsLink.style.borderRadius = "5px";
-            statboticsLink.style.border = "2px solid #000000";
-            statboticsLink.style.margin = "0";
-            statboticsLink.addEventListener("mouseenter", () => {
-                statboticsLink.style.opacity = "0.8";
-            });
-
-            statboticsLink.addEventListener("mouseleave", () => {
-                statboticsLink.style.opacity = "1.0"; 
-            });
-
-            statboticsLink.addEventListener("mousedown", () => {
-                statboticsLink.style.opacity = "0.6";
-            });
-
-            statboticsLink.addEventListener("mouseup", () => {
-                statboticsLink.style.opacity = "0.8"; 
-            });
-
-            downDiv.appendChild(statboticsLink);
-
-            eventDiv.appendChild(upDiv);
-            eventDiv.appendChild(downDiv);
-
-            eventTitleDiv.appendChild(eventDiv);
-
-            if (window.location.hash === "#rankings") {
-                sendGetRequestForAwardsInfo(eventID).then(awardsData => {
-                    //console.log(awardsData);
-
-                    const RankingsTable = document.querySelector("#rankingsTable");
-
-                    const headerRow = RankingsTable.querySelector("thead tr");
-                    if (headerRow && !headerRow.querySelector(".awards-header-added")) {
-                        const awardsHeader = document.createElement("th");
-                        awardsHeader.textContent = "Awards";
-                        awardsHeader.classList.add("tablesorter-header", "awards-header-added"); 
-                        awardsHeader.style.width = "100px"; 
-                        headerRow.appendChild(awardsHeader);
-                    }
-                    
-                    const tableRows = RankingsTable.querySelectorAll("tbody > tr"); 
-                    
-                    for (let i = 0; i < tableRows.length; i++) {
-                        const currentRow = tableRows[i]; 
-                        const teamLink = currentRow.querySelector("td:nth-child(2) a");
-                        
-                        if (!teamLink) {
-                            continue; 
-                        }
-                        
-                        const teamNumber = teamLink.textContent.trim();
-                        const teamKey = `frc${teamNumber}`;
-                        
-                        const teamAwards = awardsData.filter(award => 
-                            award.recipient_list.some(recipient => recipient.team_key === teamKey)
-                        );
-                        
-                        const awardsCell = document.createElement("td");
-                        
-                        if (teamAwards.length > 0) {
-                            const awardNames = teamAwards.map(award => award.name);
-                            
-                            const awardsHtml = awardNames.join('<br> <hr style="border: none; border-top: 1px solid #73176dff; margin: 5px 0;"> ');
-                            
-                            awardsCell.innerHTML = awardsHtml; 
-                            
-                            addInfoPopupTBA(awardsCell); 
-                        } else {
-                            awardsCell.textContent = "-"; 
-                        }
-                        
-                        awardsCell.style.padding = "5px 10px";
-                        awardsCell.style.border = "1px solid #ddd";
-                        awardsCell.style.textAlign = "center";
-                        awardsCell.style.fontSize = "0.85em"; 
-                        awardsCell.style.color = "#73176dff";
-
-                        currentRow.appendChild(awardsCell); 
-                    }
-                });
-
-                let createEpaColumnForRanking = async () => {
-                    const RankingsTable = document.querySelector("#rankingsTable");
-
-                    const headerRow = RankingsTable.querySelector("thead tr");
-                    if (headerRow && !headerRow.querySelector(".epa-header-added")) {
-                        const seasonEpaHeader = document.createElement("th");
-                        seasonEpaHeader.textContent = "Season EPA Mean";
-                        seasonEpaHeader.classList.add("tablesorter-header", "epa-header-added"); 
-                        seasonEpaHeader.style.width = "70px";
-                        seasonEpaHeader.style.cursor = "pointer";
-                        seasonEpaHeader.title = "Click to sort highest to lowest";
-                        headerRow.appendChild(seasonEpaHeader);
-
-                        const eventEpaHeader = document.createElement("th");
-                        eventEpaHeader.textContent = "Event EPA Mean";
-                        eventEpaHeader.classList.add("tablesorter-header", "epa-header-added"); 
-                        eventEpaHeader.style.width = "70px";
-                        eventEpaHeader.style.cursor = "pointer";
-                        eventEpaHeader.title = "Click to sort highest to lowest";
-                        headerRow.appendChild(eventEpaHeader);
-                    }
-
-                    const sortRowsByEpa = (epaType) => {
-                        const tbody = RankingsTable.querySelector("tbody");
-                        if (!tbody) return;
-
-                        const rows = Array.from(tbody.querySelectorAll("tr"));
-                        const currentKey = RankingsTable.dataset.sortKey;
-                        const currentDirection = RankingsTable.dataset.sortDirection || "desc";
-
-                        const nextDirection = currentKey === epaType && currentDirection === "desc" ? "asc" : "desc";
-                        RankingsTable.dataset.sortKey = epaType;
-                        RankingsTable.dataset.sortDirection = nextDirection;
-
-                        rows.sort((rowA, rowB) => {
-                            const cellA = rowA.querySelector(`td[data-epa-type="${epaType}"]`);
-                            const cellB = rowB.querySelector(`td[data-epa-type="${epaType}"]`);
-
-                            const parseCellValue = (cell) => {
-                                if (!cell || cell.textContent.trim() === "-" || cell.textContent.trim() === "Loading...") {
-                                    return Number.NEGATIVE_INFINITY;
-                                }
-
-                                const value = Number.parseFloat(cell.textContent.replace(/[^0-9.-]/g, ""));
-                                return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
-                            };
-
-                            const valueA = parseCellValue(cellA);
-                            const valueB = parseCellValue(cellB);
-
-                            if (valueA === Number.NEGATIVE_INFINITY && valueB === Number.NEGATIVE_INFINITY) return 0;
-                            if (valueA === Number.NEGATIVE_INFINITY) return 1;
-                            if (valueB === Number.NEGATIVE_INFINITY) return -1;
-
-                            return nextDirection === "desc" ? valueB - valueA : valueA - valueB;
-                        });
-
-                        rows.forEach((row) => tbody.appendChild(row));
-                    };
-
-                    const sortHeaders = headerRow.querySelectorAll(".epa-header-added");
-                    sortHeaders.forEach((header) => {
-                        header.onclick = () => {
-                            const type = header.textContent.includes("Season") ? "season" : "event";
-                            sortRowsByEpa(type);
-                        };
-                    });
-
-                    const tableRows = RankingsTable.querySelectorAll("tbody > tr"); 
-
-                    let year = eventID.slice(0,4);
-
-                    for (let i = 0; i < tableRows.length; i++) {
-                        const currentRow = tableRows[i]; 
-                        const teamLink = currentRow.querySelector("td:nth-child(2) a");
-                        
-                        if (!teamLink) {
-                            continue; 
-                        }
-                        
-                        const teamNumber = teamLink.textContent.trim();
-
-                        const seasonEpaCell = document.createElement("td");
-                        seasonEpaCell.dataset.epaType = "season";
-                        seasonEpaCell.style.padding = "5px 10px";
-                        seasonEpaCell.style.border = "1px solid #ddd";
-                        seasonEpaCell.style.textAlign = "center";
-                        seasonEpaCell.style.fontSize = "0.85em"; 
-                        seasonEpaCell.style.color = "#73176dff";
-                        seasonEpaCell.textContent = "Loading...";
-
-                        const eventEpaCell = document.createElement("td");
-                        eventEpaCell.dataset.epaType = "event";
-                        eventEpaCell.style.padding = "5px 10px";
-                        eventEpaCell.style.border = "1px solid #ddd";
-                        eventEpaCell.style.textAlign = "center";
-                        eventEpaCell.style.fontSize = "0.85em"; 
-                        eventEpaCell.style.color = "#73176dff";
-                        eventEpaCell.textContent = "Loading...";          
-
-                        addInfoPopupStatbotics(seasonEpaCell);
-                        currentRow.appendChild(seasonEpaCell);
-
-                        addInfoPopupStatbotics(eventEpaCell);
-                        currentRow.appendChild(eventEpaCell);
-
-                        sendGetRequestForTeamInfo(teamNumber, year).then(data => {
-                            const teamData = data;
-                            if (teamData && teamData.epa && teamData.epa.total_points && teamData.epa.total_points.mean !== undefined && teamData.epa.total_points.mean !== null) {
-                                seasonEpaCell.textContent = teamData.epa.total_points.mean;
-                            } else {
-                                seasonEpaCell.textContent = "-";
-                            }
-                        }).catch(err => {
-                            seasonEpaCell.textContent = "-";
-                        });
-
-                        sendGetRequestForTeamInfoForEvent(teamNumber, eventID).then(data => {
-                            const teamData = data;
-                            if (teamData && teamData.epa && teamData.epa.total_points && teamData.epa.total_points.mean !== undefined && teamData.epa.total_points.mean !== null) {
-                                eventEpaCell.textContent = teamData.epa.total_points.mean;
-                            } else {
-                                eventEpaCell.textContent = "-";
-                            }
-                        }).catch(err => {
-                            eventEpaCell.textContent = "-";
-                        });
-                    }
-                }
-
-                createEpaColumnForRanking();
-            }
-
-            window.addEventListener('hashchange', () => {
-                if (window.location.hash === "#rankings") {
-                    window.location.reload();
-                }
-            });
-        }).catch(err => {
-            const eventTitleDiv = document.querySelector("#event-name");
-            if (!eventTitleDiv) return;
-            eventTitleDiv.style.display = "flex";
-            eventTitleDiv.style.flexDirection = "row";
-
-            const errorDiv = document.createElement("div");
-            errorDiv.style.marginLeft = "10px";
-            const errorMsg = document.createElement("p");
-            errorMsg.textContent = "Statbotics API Unavailable";
-            errorMsg.style.backgroundColor = "#D76198";
-            errorMsg.style.padding = "5px 10px";
-            errorMsg.style.fontSize = "15px";
-            errorMsg.style.color = "#ffffff";
-            errorMsg.style.borderRadius = "5px";
-            errorMsg.style.border = "2px solid #000000";
-            errorMsg.style.margin = "0";
-            errorDiv.appendChild(errorMsg);
-            eventTitleDiv.appendChild(errorDiv);
+async function loadEventStats(eventID, source) {
+    if (source.id === SOURCE_PEEKOROBO) {
+        const data = await fetchJson(
+            `${config.PEEKOROBO_API_URL}/event/${eventID}/event_perfs`
+        );
+        const perfs = data.perfs || [];
+        const aces = perfs
+            .map((p) => Number(p.ace))
+            .filter((n) => Number.isFinite(n));
+        const byTeam = {};
+        perfs.forEach((p) => {
+            byTeam[String(p.team_number)] = { eventRating: p.ace };
         });
-    });
+        return {
+            status: aces.length ? null : "Upcoming Event",
+            maxRating: aces.length ? Math.max(...aces) : null,
+            meanRating: aces.length ? aces.reduce((sum, n) => sum + n, 0) / aces.length : null,
+            byTeam
+        };
+    }
+
+    const data = await fetchJson(`${config.STATBOTICS_API_URL}/event/${eventID}`);
+    return {
+        status: data.status_str || "Upcoming Event",
+        maxRating: data.epa && data.epa.max,
+        meanRating: data.epa && data.epa.mean,
+        byTeam: {}
+    };
 }
 
-if (window.location.href.includes("https://www.thebluealliance.com/match/")) {
-    checkAndExecute(() => {
-        let urlParts = window.location.href.split("/").filter(Boolean); 
+async function loadSeasonRating(teamNumber, year, source) {
+    if (source.id === SOURCE_PEEKOROBO) {
+        const data = await fetchJson(
+            `${config.PEEKOROBO_API_URL}/team_perfs/${teamNumber}?year=${year}`
+        );
+        const perf = data.team_perfs && data.team_perfs[0];
+        return perf && perf.ace != null ? perf.ace : null;
+    }
 
-        let matchIndex = urlParts.indexOf("match") + 1;
-        let matchID = urlParts[matchIndex];
+    const data = await fetchJson(
+        `${config.STATBOTICS_API_URL}/team_year/${teamNumber}/${year}`
+    );
+    if (data && data.epa && data.epa.total_points && data.epa.total_points.mean != null) {
+        return data.epa.total_points.mean;
+    }
+    return null;
+}
 
-        let sendGetRequestForMatchInfo = async (matchID) => {
-            let response = await fetch(`${config.STATBOTICS_API_URL}/match/${matchID}`);
-            let data = await response.json();
-            return data;
+async function loadEventRating(teamNumber, eventID, source, eventStats) {
+    if (source.id === SOURCE_PEEKOROBO) {
+        const cached = eventStats && eventStats.byTeam && eventStats.byTeam[String(teamNumber)];
+        if (cached && cached.eventRating != null) return cached.eventRating;
+        const data = await fetchJson(
+            `${config.PEEKOROBO_API_URL}/event/${eventID}/event_perfs/${teamNumber}`
+        );
+        return data && data.ace != null ? data.ace : null;
+    }
+
+    const data = await fetchJson(
+        `${config.STATBOTICS_API_URL}/team_event/${teamNumber}/${eventID}`
+    );
+    if (data && data.epa && data.epa.total_points && data.epa.total_points.mean != null) {
+        return data.epa.total_points.mean;
+    }
+    return null;
+}
+
+async function loadMatchStats(matchID, source) {
+    if (source.id === SOURCE_PEEKOROBO) {
+        const eventKey = String(matchID).split("_")[0];
+        const data = await fetchJson(
+            `${config.PEEKOROBO_API_URL}/event/${eventKey}/matches?match_key=${encodeURIComponent(matchID)}`
+        );
+        const match = data.matches && data.matches[0];
+        if (!match) return { available: false };
+
+        const redProb = Number(match.red_win_prob);
+        const blueProb = Number(match.blue_win_prob);
+        let predictedWinner = null;
+        let winProb = null;
+        if (Number.isFinite(redProb) || Number.isFinite(blueProb)) {
+            if ((redProb || 0) >= (blueProb || 0)) {
+                predictedWinner = "Red";
+                winProb = redProb;
+            } else {
+                predictedWinner = "Blue";
+                winProb = blueProb;
+            }
         }
 
-        sendGetRequestForMatchInfo(matchID).then(data => {
-            const matchData = data;
+        const winner = match.winning_alliance;
+        const actualWinner = winner && winner !== "" && winner !== "unknown"
+            ? winner.charAt(0).toUpperCase() + winner.slice(1)
+            : null;
 
-            //console.log(matchData);
+        return {
+            available: Boolean(predictedWinner || actualWinner),
+            predictedWinner,
+            winProb,
+            actualWinner
+        };
+    }
 
-            const matchTitleDiv = document.querySelector("#match-title");
-            if (!matchTitleDiv) return;
-            matchTitleDiv.style.display = "flex";
-            matchTitleDiv.style.flexDirection = "row";
+    const data = await fetchJson(`${config.STATBOTICS_API_URL}/match/${matchID}`);
+    let predictedWinner = null;
+    let winProb = null;
+    if (data.pred && data.pred.winner) {
+        predictedWinner = data.pred.winner.charAt(0).toUpperCase() + data.pred.winner.slice(1);
+        if (data.pred.winner === "red") {
+            winProb = data.pred.red_win_prob;
+        } else if (data.pred.winner === "blue") {
+            winProb = 1 - data.pred.red_win_prob;
+        }
+    }
+    const actualWinner = data.result && data.result.winner
+        ? data.result.winner.charAt(0).toUpperCase() + data.result.winner.slice(1)
+        : null;
+    return {
+        available: Boolean(predictedWinner || actualWinner),
+        predictedWinner,
+        winProb,
+        actualWinner
+    };
+}
 
-            const matchDiv = document.createElement("div");
-            matchDiv.className = "extension-statbotics-match-div";
-            matchDiv.style.display = "flex";
-            matchDiv.style.flexDirection = "column";
-            matchDiv.style.justifyContent = "center";  
-            matchDiv.style.alignItems = "center";     
-            matchDiv.style.marginLeft = "10px";
-            matchDiv.style.gap = "7px";
+function appendTeamPills(row, source, stats) {
+    appendSourceLabel(row, source);
+    if (!stats || !stats.available) {
+        row.appendChild(createPill(
+            "No Info Available For This Season/Team",
+            source,
+            "extension-statbotics-warning"
+        ));
+        return;
+    }
+    if (stats.globalRank != null) {
+        row.appendChild(createPill(
+            `Global ${source.ratingName} Rank: ${stats.globalRank}`,
+            source,
+            "extension-statbotics-rank"
+        ));
+    }
+    const rating = formatNumber(stats.rating);
+    if (rating != null) {
+        row.appendChild(createPill(
+            `Total ${source.ratingName}: ${rating}`,
+            source,
+            "extension-statbotics-total-epa"
+        ));
+    }
+    const percentile = formatPercentile(stats.percentile);
+    if (percentile != null) {
+        row.appendChild(createPill(
+            `${source.ratingName} Percentile: ${percentile}`,
+            source,
+            "extension-statbotics-epa-percentile"
+        ));
+    }
+    if (stats.wins != null) {
+        row.appendChild(createPill(
+            `Number Of Wins: ${stats.wins}`,
+            source,
+            "extension-statbotics-win"
+        ));
+    }
+    if (stats.losses != null) {
+        row.appendChild(createPill(
+            `Number Of Losses: ${stats.losses}`,
+            source,
+            "extension-statbotics-loss"
+        ));
+    }
+    const winrate = formatWinrate(stats.winrate);
+    if (winrate != null) {
+        row.appendChild(createPill(
+            `Winrate: ${winrate}`,
+            source,
+            "extension-statbotics-winrate"
+        ));
+    }
+}
 
-            const upDiv = document.createElement("div");
-            upDiv.className = "up-div";
-            upDiv.style.display = "flex";
-            upDiv.style.flexDirection = "row";
-            upDiv.style.justifyContent = "center";  
-            upDiv.style.alignItems = "center";     
-            upDiv.style.gap = "10px";
+function renderTeamPage(generation) {
+    const sources = getActiveSources();
+    const urlParts = parsePageParts();
+    const teamIndex = urlParts.indexOf("team") + 1;
+    const teamNumber = cleanSegment(urlParts[teamIndex]);
+    const year = cleanSegment(urlParts[teamIndex + 1]) || new Date().getFullYear();
+    const teamTitleDiv = document.querySelector("#team-title");
+    if (!teamTitleDiv) return;
 
-            const downDiv = document.createElement("div");
-            downDiv.className = "down-div";
-            downDiv.style.display = "flex";
-            downDiv.style.flexDirection = "row";
-            downDiv.style.justifyContent = "center";  
-            downDiv.style.alignItems = "center";     
-            downDiv.style.gap = "10px";
+    const rows = startSourceLayout(teamTitleDiv, sources, (source) => (
+        createLinkButton(source, source.teamUrl(teamNumber, year))
+    ));
 
-            if (matchData.pred && matchData.pred.winner) {
-                let predictedWinner = matchData.pred.winner;
-                predictedWinner = predictedWinner.charAt(0).toUpperCase() + predictedWinner.slice(1);
-                const matchPrediction = document.createElement("p");
-                matchPrediction.className = "extension-statbotics-prediction";
-                matchPrediction.textContent = `Predicted Winner: ${predictedWinner}`;
-                matchPrediction.style.backgroundColor = "#D76198";
-                matchPrediction.style.padding = "5px 10px";
-                matchPrediction.style.fontSize = "15px";
-                matchPrediction.style.color = "#ffffff";
-                matchPrediction.style.borderRadius = "5px";
-                matchPrediction.style.border = "2px solid #000000";
-                matchPrediction.style.margin = "0";
-
-                const matchWinProbability = document.createElement("p");
-                matchWinProbability.className = "extension-statbotics-probability";
-                if (matchData.pred.winner === "red") {
-                    matchWinProbability.textContent = `Predicted Winner Probability: ${(matchData.pred.red_win_prob*100).toFixed(2)}%`;
-                } else if (matchData.pred.winner === "blue") {
-                    matchWinProbability.textContent = `Predicted Winner's Winning Percentage: ${((1-matchData.pred.red_win_prob)*100).toFixed(2)}%`;
-                }
-                matchWinProbability.style.backgroundColor = "#D76198";
-                matchWinProbability.style.padding = "5px 10px";
-                matchWinProbability.style.fontSize = "15px";
-                matchWinProbability.style.color = "#ffffff";
-                matchWinProbability.style.borderRadius = "5px";
-                matchWinProbability.style.border = "2px solid #000000";
-                matchWinProbability.style.margin = "0";
-
-                upDiv.appendChild(matchPrediction);
-                upDiv.appendChild(matchWinProbability);
-
-                matchDiv.appendChild(upDiv);
-                matchDiv.appendChild(downDiv);
-
-                addInfoPopupStatbotics(matchPrediction);
-                addInfoPopupStatbotics(matchWinProbability);
-
-                if (matchData.result && matchData.result.winner) {
-                    let realWinner = matchData.result.winner;
-                    realWinner = realWinner.charAt(0).toUpperCase() + realWinner.slice(1);
-                    const winner = document.createElement("p");
-                    winner.className = "extension-statbotics-winner";
-                    winner.textContent = `Winner: ${realWinner}`;
-                    winner.style.backgroundColor = "#D76198";
-                    winner.style.padding = "5px 10px";
-                    winner.style.fontSize = "15px";
-                    winner.style.color = "#ffffff";
-                    winner.style.borderRadius = "5px";
-                    winner.style.border = "2px solid #000000";
-                    winner.style.margin = "0";
-
-                    downDiv.appendChild(winner);
-                    addInfoPopupStatbotics(winner);
-                } 
-
-                const statboticsLink = document.createElement("button");
-                statboticsLink.className = "extension-statbotics-rank";
-                statboticsLink.textContent = `Statbotics Page`;
-                statboticsLink.onclick = () => {
-                    window.open(`https://www.statbotics.io/match/${matchID}`, '_blank');
-                };
-                statboticsLink.style.backgroundColor = "#940847ff";
-                statboticsLink.style.padding = "5px 10px";
-                statboticsLink.style.fontSize = "15px";
-                statboticsLink.style.color = "#ffffff";
-                statboticsLink.style.borderRadius = "5px";
-                statboticsLink.style.border = "2px solid #000000";
-                statboticsLink.style.margin = "0";
-                statboticsLink.addEventListener("mouseenter", () => {
-                    statboticsLink.style.opacity = "0.8";
-                });
-
-                statboticsLink.addEventListener("mouseleave", () => {
-                    statboticsLink.style.opacity = "1.0"; 
-                });
-
-                statboticsLink.addEventListener("mousedown", () => {
-                    statboticsLink.style.opacity = "0.6";
-                });
-
-                statboticsLink.addEventListener("mouseup", () => {
-                    statboticsLink.style.opacity = "0.8"; 
-                });
-
-                downDiv.appendChild(statboticsLink);
-            }
-            else {
-                if (matchData.result && matchData.result.winner) {
-                    let realWinner = matchData.result.winner;
-                    realWinner = realWinner.charAt(0).toUpperCase() + realWinner.slice(1);
-                    const winner = document.createElement("p");
-                    winner.className = "extension-statbotics-winner";
-                    winner.textContent = `Winner: ${realWinner}`;
-                    winner.style.backgroundColor = "#D76198";
-                    winner.style.padding = "5px 10px";
-                    winner.style.fontSize = "15px";
-                    winner.style.color = "#ffffff";
-                    winner.style.borderRadius = "5px";
-                    winner.style.border = "2px solid #000000";
-                    winner.style.margin = "0";
-
-                    matchDiv.appendChild(winner);
-                    addInfoPopupStatbotics(winner);
-                } 
-            }
-
-            if ((!matchData.pred || !matchData.pred.winner) && (!matchData.result || !matchData.result.winner)) { 
-                const warning = document.createElement("p");
-                warning.className = "extension-statbotics-warning";
-                warning.textContent = "No Info Available For This Match";
-                warning.style.backgroundColor = "#D76198";
-                warning.style.padding = "5px 10px";
-                warning.style.fontSize = "15px";
-                warning.style.color = "#ffffff";
-                warning.style.borderRadius = "5px";
-                warning.style.border = "2px solid #000000";
-                warning.style.margin = "0";
-
-                matchDiv.appendChild(warning);
-            }
-
-            matchTitleDiv.appendChild(matchDiv);
-        }).catch(err => {
-            const matchTitleDiv = document.querySelector("#match-title");
-            if (!matchTitleDiv) return;
-            matchTitleDiv.style.display = "flex";
-            matchTitleDiv.style.flexDirection = "row";
-
-            const errorDiv = document.createElement("div");
-            errorDiv.style.marginLeft = "10px";
-            const errorMsg = document.createElement("p");
-            errorMsg.textContent = "Statbotics API Unavailable";
-            errorMsg.style.backgroundColor = "#D76198";
-            errorMsg.style.padding = "5px 10px";
-            errorMsg.style.fontSize = "15px";
-            errorMsg.style.color = "#ffffff";
-            errorMsg.style.borderRadius = "5px";
-            errorMsg.style.border = "2px solid #000000";
-            errorMsg.style.margin = "0";
-            errorDiv.appendChild(errorMsg);
-            matchTitleDiv.appendChild(errorDiv);
+    sources.forEach((source) => {
+        const row = rows[source.id];
+        loadTeamStats(teamNumber, year, source).then((stats) => {
+            if (generation !== renderGeneration) return;
+            row.replaceChildren();
+            appendTeamPills(row, source, stats);
+        }).catch(() => {
+            if (generation !== renderGeneration) return;
+            row.replaceChildren();
+            appendUnavailable(row, source);
         });
     });
 }
+
+function applyRankingCellStyle(cell, source) {
+    cell.setAttribute(MARKER_ATTR, "1");
+    cell.style.padding = "5px 10px";
+    cell.style.border = "1px solid #ddd";
+    cell.style.textAlign = "center";
+    cell.style.fontSize = "0.85em";
+    cell.style.color = source.tableColor;
+}
+
+function setCellLabel(cell, text) {
+    let label = cell.querySelector("[data-arcbotics-label]");
+    if (!label) {
+        label = document.createElement("span");
+        label.setAttribute("data-arcbotics-label", "1");
+        cell.insertBefore(label, cell.firstChild);
+    }
+    label.textContent = text;
+}
+
+function addRatingHeader(headerRow, source, kind) {
+    const header = document.createElement("th");
+    header.textContent = isBothMode()
+        ? `${source.name} ${kind === "season" ? "Season" : "Event"} ${source.ratingName}`
+        : `${kind === "season" ? "Season" : "Event"} ${source.ratingName}`;
+    header.classList.add("tablesorter-header", "epa-header-added");
+    header.setAttribute(MARKER_ATTR, "1");
+    header.dataset.epaType = `${kind}-${source.id}`;
+    header.style.width = "70px";
+    header.style.cursor = "pointer";
+    header.title = "Click to sort highest to lowest";
+    headerRow.appendChild(header);
+}
+
+function enhanceRankingsTable(eventID, sources) {
+    sendGetRequestForAwardsInfo(eventID).then((awardsData) => {
+        const RankingsTable = document.querySelector("#rankingsTable");
+        if (!RankingsTable) return;
+
+        const headerRow = RankingsTable.querySelector("thead tr");
+        if (headerRow && !headerRow.querySelector(".awards-header-added")) {
+            const awardsHeader = document.createElement("th");
+            awardsHeader.textContent = "Awards";
+            awardsHeader.classList.add("tablesorter-header", "awards-header-added");
+            awardsHeader.setAttribute(MARKER_ATTR, "1");
+            awardsHeader.style.width = "100px";
+            headerRow.appendChild(awardsHeader);
+        }
+
+        const tableRows = RankingsTable.querySelectorAll("tbody > tr");
+        const awardSource = sources[0] || SOURCES[SOURCE_PEEKOROBO];
+        for (let i = 0; i < tableRows.length; i++) {
+            const currentRow = tableRows[i];
+            const teamLink = currentRow.querySelector("td:nth-child(2) a");
+            if (!teamLink) continue;
+
+            const teamNumber = teamLink.textContent.trim();
+            const teamKey = `frc${teamNumber}`;
+            const teamAwards = awardsData.filter((award) =>
+                award.recipient_list.some((recipient) => recipient.team_key === teamKey)
+            );
+
+            const awardsCell = document.createElement("td");
+            applyRankingCellStyle(awardsCell, awardSource);
+            if (teamAwards.length > 0) {
+                awardsCell.innerHTML = teamAwards
+                    .map((award) => award.name)
+                    .join('<br> <hr style="border: none; border-top: 1px solid #73176dff; margin: 5px 0;"> ');
+                addInfoPopup(awardsCell, "Data retrieved from TBA API");
+            } else {
+                awardsCell.textContent = "-";
+            }
+            currentRow.appendChild(awardsCell);
+        }
+    }).catch(() => {});
+
+    const RankingsTable = document.querySelector("#rankingsTable");
+    if (!RankingsTable) return;
+
+    const headerRow = RankingsTable.querySelector("thead tr");
+    if (headerRow && !headerRow.querySelector(".epa-header-added")) {
+        sources.forEach((source) => {
+            addRatingHeader(headerRow, source, "season");
+            addRatingHeader(headerRow, source, "event");
+        });
+    }
+
+    const sortRowsByEpa = (epaType) => {
+        const tbody = RankingsTable.querySelector("tbody");
+        if (!tbody) return;
+
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+        const currentKey = RankingsTable.dataset.sortKey;
+        const currentDirection = RankingsTable.dataset.sortDirection || "desc";
+        const nextDirection = currentKey === epaType && currentDirection === "desc" ? "asc" : "desc";
+        RankingsTable.dataset.sortKey = epaType;
+        RankingsTable.dataset.sortDirection = nextDirection;
+
+        rows.sort((rowA, rowB) => {
+            const cellA = rowA.querySelector(`td[data-epa-type="${epaType}"]`);
+            const cellB = rowB.querySelector(`td[data-epa-type="${epaType}"]`);
+            const parseCellValue = (cell) => {
+                if (!cell || cell.textContent.trim() === "-" || cell.textContent.includes("Loading...")) {
+                    return Number.NEGATIVE_INFINITY;
+                }
+                const value = Number.parseFloat(cell.textContent.replace(/[^0-9.-]/g, ""));
+                return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
+            };
+            const valueA = parseCellValue(cellA);
+            const valueB = parseCellValue(cellB);
+            if (valueA === Number.NEGATIVE_INFINITY && valueB === Number.NEGATIVE_INFINITY) return 0;
+            if (valueA === Number.NEGATIVE_INFINITY) return 1;
+            if (valueB === Number.NEGATIVE_INFINITY) return -1;
+            return nextDirection === "desc" ? valueB - valueA : valueA - valueB;
+        });
+        rows.forEach((row) => tbody.appendChild(row));
+    };
+
+    if (headerRow) {
+        headerRow.querySelectorAll(".epa-header-added").forEach((header) => {
+            header.onclick = () => sortRowsByEpa(header.dataset.epaType);
+        });
+    }
+
+    const peekoEventStatsP = sources.some((source) => source.id === SOURCE_PEEKOROBO)
+        ? loadEventStats(eventID, SOURCES[SOURCE_PEEKOROBO]).catch(() => ({ byTeam: {} }))
+        : Promise.resolve({ byTeam: {} });
+
+    const tableRows = RankingsTable.querySelectorAll("tbody > tr");
+    const year = eventID.slice(0, 4);
+
+    for (let i = 0; i < tableRows.length; i++) {
+        const currentRow = tableRows[i];
+        const teamLink = currentRow.querySelector("td:nth-child(2) a");
+        if (!teamLink) continue;
+
+        const teamNumber = teamLink.textContent.trim();
+
+        sources.forEach((source) => {
+            const seasonEpaCell = document.createElement("td");
+            seasonEpaCell.dataset.epaType = `season-${source.id}`;
+            applyRankingCellStyle(seasonEpaCell, source);
+            setCellLabel(seasonEpaCell, "Loading...");
+
+            const eventEpaCell = document.createElement("td");
+            eventEpaCell.dataset.epaType = `event-${source.id}`;
+            applyRankingCellStyle(eventEpaCell, source);
+            setCellLabel(eventEpaCell, "Loading...");
+
+            addInfoPopup(seasonEpaCell, source.tooltip);
+            currentRow.appendChild(seasonEpaCell);
+            addInfoPopup(eventEpaCell, source.tooltip);
+            currentRow.appendChild(eventEpaCell);
+
+            loadSeasonRating(teamNumber, year, source).then((value) => {
+                setCellLabel(seasonEpaCell, formatNumber(value) || "-");
+            }).catch(() => {
+                setCellLabel(seasonEpaCell, "-");
+            });
+
+            const eventStatsP = source.id === SOURCE_PEEKOROBO
+                ? peekoEventStatsP
+                : Promise.resolve({ byTeam: {} });
+            eventStatsP.then((eventStats) => (
+                loadEventRating(teamNumber, eventID, source, eventStats)
+            )).then((value) => {
+                setCellLabel(eventEpaCell, formatNumber(value) || "-");
+            }).catch(() => {
+                setCellLabel(eventEpaCell, "-");
+            });
+        });
+    }
+}
+
+function sendGetRequestForAwardsInfo(eventID) {
+    const eventIDSplit = eventID.split("#")[0];
+    return fetchJson(`${config.TBA_API_URL}/event/${eventIDSplit}/awards`, {
+        headers: { "X-TBA-Auth-Key": config.TBA_API_KEY }
+    });
+}
+
+function appendEventPills(row, source, eventStats, error) {
+    appendSourceLabel(row, source);
+    if (error || !eventStats) {
+        row.appendChild(createPill(
+            `${source.name} API Unavailable`,
+            source,
+            "extension-statbotics-warning"
+        ));
+        return;
+    }
+
+    if (eventStats.status) {
+        row.appendChild(createPill(
+            eventStats.status === "Upcoming Event"
+                ? "Upcoming Event"
+                : `Event Status: ${eventStats.status}`,
+            source,
+            "extension-statbotics-event-status"
+        ));
+    }
+
+    const maxRating = formatNumber(eventStats.maxRating);
+    if (maxRating != null) {
+        row.appendChild(createPill(
+            `Max ${source.ratingName}: ${maxRating}`,
+            source,
+            "extension-statbotics-max-epa"
+        ));
+    }
+
+    const meanRating = formatNumber(eventStats.meanRating);
+    if (meanRating != null) {
+        row.appendChild(createPill(
+            `Mean ${source.ratingName}: ${meanRating}`,
+            source,
+            "extension-statbotics-max-epa"
+        ));
+    }
+}
+
+function renderEventPage(generation) {
+    const sources = getActiveSources();
+    const urlParts = parsePageParts();
+    const eventIndex = urlParts.indexOf("event") + 1;
+    const eventID = cleanSegment(urlParts[eventIndex]);
+    const eventTitleDiv = document.querySelector("#event-name");
+    if (!eventTitleDiv) return;
+
+    const rows = startSourceLayout(eventTitleDiv, sources, (source) => (
+        createLinkButton(source, source.eventUrl(eventID))
+    ));
+
+    if (window.location.hash === "#rankings") {
+        enhanceRankingsTable(eventID, sources);
+    }
+
+    if (!hashChangeBound) {
+        hashChangeBound = true;
+        window.addEventListener("hashchange", () => {
+            if (window.location.hash === "#rankings") {
+                window.location.reload();
+            }
+        });
+    }
+
+    sources.forEach((source) => {
+        const row = rows[source.id];
+        loadEventStats(eventID, source).then((eventStats) => {
+            if (generation !== renderGeneration) return;
+            row.replaceChildren();
+            appendEventPills(row, source, eventStats, false);
+        }).catch(() => {
+            if (generation !== renderGeneration) return;
+            row.replaceChildren();
+            appendEventPills(row, source, null, true);
+        });
+    });
+}
+
+function appendMatchPills(row, source, stats, error) {
+    appendSourceLabel(row, source);
+    if (error) {
+        row.appendChild(createPill(
+            `${source.name} API Unavailable`,
+            source,
+            "extension-statbotics-warning"
+        ));
+        return;
+    }
+    if (!stats || !stats.available) {
+        row.appendChild(createPill(
+            "No Info Available For This Match",
+            source,
+            "extension-statbotics-warning"
+        ));
+        return;
+    }
+    if (stats.predictedWinner) {
+        row.appendChild(createPill(
+            `Predicted Winner: ${stats.predictedWinner}`,
+            source,
+            "extension-statbotics-prediction"
+        ));
+        if (stats.winProb != null) {
+            row.appendChild(createPill(
+                `Predicted Winner Probability: ${(Number(stats.winProb) * 100).toFixed(2)}%`,
+                source,
+                "extension-statbotics-probability"
+            ));
+        }
+    }
+    if (stats.actualWinner) {
+        row.appendChild(createPill(
+            `Winner: ${stats.actualWinner}`,
+            source,
+            "extension-statbotics-winner"
+        ));
+    }
+}
+
+function renderMatchPage(generation) {
+    const sources = getActiveSources();
+    const urlParts = parsePageParts();
+    const matchIndex = urlParts.indexOf("match") + 1;
+    const matchID = cleanSegment(urlParts[matchIndex]);
+    const matchTitleDiv = document.querySelector("#match-title");
+    if (!matchTitleDiv) return;
+
+    const rows = startSourceLayout(matchTitleDiv, sources, (source) => (
+        createLinkButton(source, source.matchUrl(matchID))
+    ));
+
+    sources.forEach((source) => {
+        const row = rows[source.id];
+        loadMatchStats(matchID, source).then((stats) => {
+            if (generation !== renderGeneration) return;
+            row.replaceChildren();
+            appendMatchPills(row, source, stats, false);
+        }).catch(() => {
+            if (generation !== renderGeneration) return;
+            row.replaceChildren();
+            appendMatchPills(row, source, null, true);
+        });
+    });
+}
+
+function runForPage() {
+    renderGeneration += 1;
+    if (!currentSettings.extensionActive) return;
+    const href = window.location.href;
+    if (href.includes("https://www.thebluealliance.com/team/")) {
+        renderTeamPage(renderGeneration);
+    } else if (href.includes("https://www.thebluealliance.com/event/")) {
+        renderEventPage(renderGeneration);
+    } else if (href.includes("https://www.thebluealliance.com/match/")) {
+        renderMatchPage(renderGeneration);
+    }
+}
+
+function init() {
+    chrome.storage.local.get(
+        { extensionActive: true, dataSource: SOURCE_PEEKOROBO },
+        (settings) => {
+            currentSettings = settings;
+            runForPage();
+        }
+    );
+
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== "local") return;
+        let shouldRerun = false;
+        if (changes.extensionActive) {
+            currentSettings.extensionActive = changes.extensionActive.newValue;
+            shouldRerun = true;
+        }
+        if (changes.dataSource) {
+            currentSettings.dataSource = changes.dataSource.newValue;
+            shouldRerun = true;
+        }
+        if (!shouldRerun) return;
+        clearInjected();
+        runForPage();
+    });
+}
+
+init();
