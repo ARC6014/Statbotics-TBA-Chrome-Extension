@@ -3,21 +3,110 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Extension</title>
+    <title>Arcbotics</title>
     <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #1c1c1c;
+            color: #FBE9F2;
+        }
+
+        .popup {
+            width: 260px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 16px;
+        }
+
+        .subtitle {
+            margin: 0;
+            font-size: 12px;
+            color: #cbb7c3;
+        }
+
         .activation-deactivation-button {
-            width: 100px;
+            width: 100%;
             height: 40px;
             background-color: #1c1c1c;
             color: #FBE9F2;
+            border: 1px solid #FBE9F2;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .label {
+            font-size: 12px;
+            font-weight: bold;
+            margin-top: 4px;
+        }
+
+        .source-toggle {
+            display: flex;
+            gap: 6px;
+        }
+
+        .source-button {
+            flex: 1;
+            height: 34px;
             border: none;
             border-radius: 5px;
             font-weight: bold;
+            cursor: pointer;
+            font-size: 11px;
+            padding: 0 4px;
+        }
+
+        .source-button.statbotics,
+        .source-button.peekorobo,
+        .source-button.both {
+            background: #6b6b6b;
+            color: #ffffff;
+        }
+
+        .source-button.statbotics.active {
+            background: #940847;
+            color: #ffffff;
+        }
+
+        .source-button.peekorobo.active {
+            background: #ffdd00;
+            color: #1a1a1a;
+        }
+
+        .source-button.both.active {
+            background: #3366CC;
+            color: #ffffff;
+        }
+
+        .hint {
+            margin: 0;
+            font-size: 11px;
+            line-height: 1.4;
+            color: #cbb7c3;
         }
     </style>
 </head>
 <body>
-    <button class="activation-deactivation-button">Activate</button>
+    <div class="popup">
+        <h1>Arcbotics</h1>
+        <p class="subtitle">Stats inside TBA</p>
+        <button class="activation-deactivation-button">Activate</button>
+        <div class="label">Data source</div>
+        <div class="source-toggle">
+            <button class="source-button statbotics" data-source="statbotics">Statbotics</button>
+            <button class="source-button peekorobo" data-source="peekorobo">Peekorobo</button>
+            <button class="source-button both" data-source="both">Both</button>
+        </div>
+        <p class="hint">Peekorobo shows ACE. Statbotics shows EPA. Both shows the two side by side. TBA pages update when you switch.</p>
+    </div>
 </body>
 <script src="extension.js"></script>
 </html>
