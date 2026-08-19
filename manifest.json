@@ -1,6 +1,6 @@
 {
-  "name": "Arcbotics - Statbotics Inside TBA (The Blue Alliance)",
-  "description": "This extension brings scouting statistics from Statbotics or Peekorobo into TBA (The Blue Alliance). Developed by Yusuf Ege Doğan of ARC#6014",
+  "name": "Arcbotics - Statbotics and Peekorobo Inside TBA (The Blue Alliance)",
+  "description": "Arcbotics brings statistics from Statbotics or Peekorobo into TBA (The Blue Alliance). Developed by Yusuf Ege Doğan of ARC#6014",
   "version": "1.1",
   "manifest_version": 3,
   "action": {
