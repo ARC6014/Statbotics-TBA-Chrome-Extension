@@ -88,8 +88,7 @@ function isTransientApiError(error) {
 }
 
 function shouldSuppressPerTeamFallback(error) {
-    return /Request timed out|Failed to fetch|NetworkError|HTTP 429/i
-        .test(error && error.message ? error.message : String(error || ""));
+    return isTransientApiError(error);
 }
 
 function getRankingData(key, load) {
@@ -1415,44 +1414,6 @@ async function loadStatboticsEventRatings(eventID) {
     return { ratingsByTeam, available: true };
 }
 
-async function loadStatboticsSeasonRatings(year, teamNumbers) {
-    const ratingsByTeam = {};
-    const requestedTeams = new Set(teamNumbers.map(String));
-    const pageSize = 1000;
-    let offset = 0;
-    let pagesFetched = 0;
-
-    while (pagesFetched < 20 && requestedTeams.size > 0) {
-        const query = new URLSearchParams({
-            year: String(year),
-            limit: String(pageSize),
-            offset: String(offset)
-        });
-        const data = await fetchJson(
-            `${config.STATBOTICS_API_URL}/team_years?${query.toString()}`,
-            { timeoutMs: RANKING_FETCH_TIMEOUT_MS }
-        );
-        if (!Array.isArray(data)) throw new Error("Invalid Statbotics team_years response");
-
-        data.forEach((teamYear) => {
-            if (!teamYear || teamYear.year != null && Number(teamYear.year) !== Number(year)) return;
-            const teamNumber = teamYear.team ?? teamYear.team_number;
-            if (teamNumber == null || !requestedTeams.has(String(teamNumber))) return;
-            const ratings = getStatboticsRatings(teamYear);
-            if (RATING_PHASES.some((phase) => ratings[phase.key] != null)) {
-                ratingsByTeam[String(teamNumber)] = ratings;
-                requestedTeams.delete(String(teamNumber));
-            }
-        });
-
-        pagesFetched += 1;
-        if (data.length < pageSize) break;
-        offset += data.length;
-    }
-
-    return { ratingsByTeam, available: true };
-}
-
 async function loadMatchStats(matchID, source) {
     if (source.id === SOURCE_PEEKOROBO) {
         const eventKey = String(matchID).split("_")[0];
@@ -1643,7 +1604,7 @@ function setCellLabel(cell, text) {
 
 function addRatingHeader(headerRow, source, kind, phase) {
     const header = document.createElement("th");
-    const dataLabel = kind === "season" ? "Season" : "Event (season fallback)";
+    const dataLabel = "Event";
     const phaseLabel = phase.key === "total" ? "Total" : phase.label;
     const ratingName = source.id === SOURCE_PEEKOROBO && phase.key !== "total"
         ? "RAW"
@@ -1662,6 +1623,10 @@ function addRatingHeader(headerRow, source, kind, phase) {
     }
     header.title = `Click to sort by ${phase.label} ${source.ratingName}`;
     headerRow.appendChild(header);
+}
+
+function getRankingRatingKinds(source) {
+    return source.id === SOURCE_STATBOTICS ? ["event"] : ["season", "event"];
 }
 
 function addRatingPhaseToggle(table, sources, onSelect) {
@@ -1865,6 +1830,12 @@ function loadRankingAwards(eventID) {
 function rankingTableNeedsEnhancement(table, sources) {
     const headerRow = table.querySelector("thead tr");
     if (!headerRow) return false;
+    if (table.querySelector('[data-epa-type^="season-statbotics-"]')) return true;
+    if (Array.from(table.querySelectorAll('td[data-epa-type^="event-statbotics-"]'))
+        .some((cell) => {
+            const label = cell.querySelector("[data-arcbotics-label]");
+            return label && label.textContent.startsWith("Seasonal:");
+        })) return true;
     if (!table.parentElement || !Array.from(table.parentElement.querySelectorAll(
         ":scope > .arcbotics-rating-phase-toggle"
     )).some((toggle) => toggle.nextElementSibling === table)) {
@@ -1872,7 +1843,7 @@ function rankingTableNeedsEnhancement(table, sources) {
     }
 
     const missingHeader = RATING_PHASES.some((phase) => sources.some((source) => (
-        ["season", "event"].some((kind) => !headerRow.querySelector(
+        getRankingRatingKinds(source).some((kind) => !headerRow.querySelector(
             `th[data-epa-type="${kind}-${source.id}-${phase.key}"]`
         ))
     )));
@@ -1881,7 +1852,7 @@ function rankingTableNeedsEnhancement(table, sources) {
     if (Array.from(table.querySelectorAll("tbody > tr")).some((row) => (
         row.querySelector('a[href*="/team/"]')
         && sources.some((source) => RATING_PHASES.some((phase) => (
-            ["season", "event"].some((kind) => !row.querySelector(
+            getRankingRatingKinds(source).some((kind) => !row.querySelector(
                 `td[data-epa-type="${kind}-${source.id}-${phase.key}"]`
             ))
         )))
@@ -1901,6 +1872,13 @@ function enhanceRankingsTable(eventID, sources) {
     const RankingsTable = findRankingsTable();
     if (!RankingsTable) return;
 
+    RankingsTable.querySelectorAll(
+        'th[data-epa-type^="season-statbotics-"], td[data-epa-type^="season-statbotics-"]'
+    ).forEach((cell) => cell.remove());
+    RankingsTable.querySelectorAll('td[data-epa-type^="event-statbotics-"]').forEach((cell) => {
+        const label = cell.querySelector("[data-arcbotics-label]");
+        if (label && label.textContent.startsWith("Seasonal:")) cell.remove();
+    });
     const headerRow = RankingsTable.querySelector("thead tr");
     if (!headerRow) return;
 
@@ -1979,6 +1957,9 @@ function enhanceRankingsTable(eventID, sources) {
         const sortKey = RankingsTable.dataset.sortKey;
         if (sortKey) {
             const parts = sortKey.split("-");
+            if (parts[0] === "season") {
+                parts[0] = "event";
+            }
             parts[parts.length - 1] = phaseKey;
             sortRowsByRating(parts.join("-"));
         }
@@ -1986,12 +1967,21 @@ function enhanceRankingsTable(eventID, sources) {
 
     RATING_PHASES.forEach((phase) => {
         sources.forEach((source) => {
-            ["season", "event"].forEach((kind) => {
-                if (!headerRow.querySelector(
-                    `th[data-epa-type="${kind}-${source.id}-${phase.key}"]`
-                )) {
+            getRankingRatingKinds(source).forEach((kind) => {
+                const type = `${kind}-${source.id}-${phase.key}`;
+                let header = headerRow.querySelector(`th[data-epa-type="${type}"]`);
+                if (!header) {
                     addRatingHeader(headerRow, source, kind, phase);
+                    return;
                 }
+                const dataLabel = kind === "season" ? "Season" : "Event";
+                const phaseLabel = phase.key === "total" ? "Total" : phase.label;
+                const ratingName = source.id === SOURCE_PEEKOROBO && phase.key !== "total"
+                    ? "RAW"
+                    : source.ratingName;
+                header.textContent = isBothMode()
+                    ? `${source.name} ${dataLabel} ${phaseLabel} ${ratingName}`
+                    : `${dataLabel} ${phaseLabel} ${ratingName}`;
             });
         });
     });
@@ -2007,7 +1997,7 @@ function enhanceRankingsTable(eventID, sources) {
     const rowsNeedingRatings = tableRows.filter((row) => {
         if (!row.querySelector('a[href*="/team/"]')) return false;
         return sources.some((source) => RATING_PHASES.some((phase) => (
-            ["season", "event"].some((kind) => !row.querySelector(
+            getRankingRatingKinds(source).some((kind) => !row.querySelector(
                 `td[data-epa-type="${kind}-${source.id}-${phase.key}"]`
             ))
         )));
@@ -2019,8 +2009,6 @@ function enhanceRankingsTable(eventID, sources) {
         return;
     }
 
-    const year = eventID.slice(0, 4);
-    const teamSetKey = Array.from(new Set(teamNumbers.map(String))).sort().join(",");
     const peekoEventStatsP = sources.some((source) => source.id === SOURCE_PEEKOROBO)
         ? getRankingData(`peekorobo:event:${eventID}`, () => (
             loadEventStats(eventID, SOURCES[SOURCE_PEEKOROBO])
@@ -2038,15 +2026,6 @@ function enhanceRankingsTable(eventID, sources) {
             return { ratingsByTeam: {}, available: false, error: error.message };
         })
         : Promise.resolve({ ratingsByTeam: {}, available: false });
-    const statboticsSeasonRatingsP = teamNumbers.length > 0
-        && sources.some((source) => source.id === SOURCE_STATBOTICS)
-        ? getRankingData(`statbotics:team_years:year:${year}:${teamSetKey}`, () => (
-            loadStatboticsSeasonRatings(year, teamNumbers)
-        )).catch((error) => {
-            console.warn("Arcbotics: Unable to load Statbotics season ratings", error);
-            return { ratingsByTeam: {}, available: false, error: error.message };
-        })
-        : Promise.resolve({ ratingsByTeam: {}, available: false });
 
     const rowsToLoad = [];
     for (const currentRow of rowsNeedingRatings) {
@@ -2058,7 +2037,7 @@ function enhanceRankingsTable(eventID, sources) {
             const cells = {};
             let hasMissingCells = false;
             RATING_PHASES.forEach((phase) => {
-                ["season", "event"].forEach((kind) => {
+                getRankingRatingKinds(source).forEach((kind) => {
                     const type = `${kind}-${source.id}-${phase.key}`;
                     let cell = currentRow.querySelector(`td[data-epa-type="${type}"]`);
                     if (!cell) {
@@ -2099,24 +2078,15 @@ function enhanceRankingsTable(eventID, sources) {
         row.dataset.arcboticsRequestedSources = Array.from(requestedSources).join(",");
 
         rowSources.forEach(({ source, cells }) => {
-            const seasonRatingsP = source.id === SOURCE_STATBOTICS
-                ? statboticsSeasonRatingsP.then((result) => {
-                    const bulkRatings = result.ratingsByTeam[String(teamNumber)];
-                    if (bulkRatings) return bulkRatings;
-                    if (result.available) return {};
-                    if (shouldSuppressPerTeamFallback(result.error)) return {};
-                    return getRankingData(
-                        `statbotics:team_year:${teamNumber}:${year}`,
-                        () => loadSeasonRatings(teamNumber, year, source)
-                    );
-                })
-                : peekoEventStatsP.then((eventStats) => {
+            const seasonRatingsP = source.id === SOURCE_PEEKOROBO
+                ? peekoEventStatsP.then((eventStats) => {
                     if (/HTTP 429/.test(eventStats.error || "")) return {};
                     return getRankingData(
-                        `peekorobo:team_perfs:${teamNumber}:${year}`,
-                        () => loadSeasonRatings(teamNumber, year, source)
+                        `peekorobo:team_perfs:${teamNumber}:${eventID.slice(0, 4)}`,
+                        () => loadSeasonRatings(teamNumber, eventID.slice(0, 4), source)
                     );
-                });
+                })
+                : Promise.resolve({});
             const eventRatingsP = source.id === SOURCE_PEEKOROBO
                 ? peekoEventStatsP.then((eventStats) => (
                     loadEventRatings(teamNumber, eventID, source, eventStats)
@@ -2126,79 +2096,49 @@ function enhanceRankingsTable(eventID, sources) {
                 ));
 
             if (source.id === SOURCE_STATBOTICS) {
-                let seasonRatings = null;
-                let eventRatings = null;
                 const isCurrentRow = () => (
                     RankingsTable.isConnected
                     && row.isConnected
                     && getRankingTeamNumber(row) === teamNumber
                 );
-                const renderSeasonCells = () => {
-                    if (!seasonRatings || !isCurrentRow()) return;
+                const renderEventCells = (eventRatings) => {
+                    if (!isCurrentRow()) return;
                     RATING_PHASES.forEach((phase) => {
-                        const value = getNumericRating(seasonRatings[phase.key]);
-                        const cell = cells[`season-${phase.key}`];
+                        const value = getNumericRating(eventRatings[phase.key]);
+                        const cell = cells[`event-${phase.key}`];
                         cell.dataset.sortValue = value == null ? "" : String(value);
                         setCellLabel(
                             cell,
-                            value == null ? "-" : `Season: ${formatNumber(value)}`
-                        );
-                    });
-                    if (eventRatings) renderEventCells();
-                };
-                const renderEventCells = () => {
-                    if (!eventRatings || !isCurrentRow()) return;
-                    RATING_PHASES.forEach((phase) => {
-                        const eventValue = getNumericRating(eventRatings[phase.key]);
-                        const seasonValue = seasonRatings
-                            ? getNumericRating(seasonRatings[phase.key])
-                            : null;
-                        const displayedValue = eventValue ?? seasonValue;
-                        const cell = cells[`event-${phase.key}`];
-                        cell.dataset.sortValue = displayedValue == null
-                            ? ""
-                            : String(displayedValue);
-                        setCellLabel(
-                            cell,
-                            displayedValue == null
-                                ? "-"
-                                : `${eventValue == null ? "Seasonal" : "Event"}: ${formatNumber(displayedValue)}`
+                            value == null ? "-" : `Event: ${formatNumber(value)}`
                         );
                     });
                 };
 
-                seasonRatingsP.then((ratings) => {
-                    seasonRatings = ratings;
-                    renderSeasonCells();
-                }).catch((error) => {
-                    console.warn(
-                        `Arcbotics: Unable to load Statbotics season ratings for team ${teamNumber}`,
-                        error
-                    );
-                    seasonRatings = {};
-                    renderSeasonCells();
-                });
                 eventRatingsP.then((ratings) => {
-                    eventRatings = ratings;
-                    renderEventCells();
+                    renderEventCells(ratings);
                 }).catch((error) => {
                     console.warn(
                         `Arcbotics: Unable to load Statbotics event ratings for team ${teamNumber}`,
                         error
                     );
-                    eventRatings = {};
-                    renderEventCells();
+                    renderEventCells({});
                 });
                 return;
             }
 
             Promise.all([
                 seasonRatingsP.catch((error) => {
-                    console.warn(`Arcbotics: Unable to load ${source.name} season ratings for team ${teamNumber}`, error);
+                    console.warn(
+                        `Arcbotics: Unable to load ${source.name} season ratings for team ${teamNumber}`,
+                        error
+                    );
                     return {};
                 }),
                 eventRatingsP.catch((error) => {
-                    console.warn(`Arcbotics: Unable to load ${source.name} event ratings for team ${teamNumber}`, error);
+                    console.warn(
+                        `Arcbotics: Unable to load ${source.name} event ratings for team ${teamNumber}`,
+                        error
+                    );
                     return {};
                 })
             ]).then(([seasonRatings, eventRatings]) => {
@@ -2214,9 +2154,9 @@ function enhanceRankingsTable(eventID, sources) {
                         seasonValue == null ? "-" : `Season: ${formatNumber(seasonValue)}`
                     );
 
-                    const eventCell = cells[`event-${phase.key}`];
                     const eventValue = getNumericRating(eventRatings[phase.key]);
                     const displayedValue = eventValue ?? seasonValue;
+                    const eventCell = cells[`event-${phase.key}`];
                     eventCell.dataset.sortValue = displayedValue == null ? "" : String(displayedValue);
                     setCellLabel(
                         eventCell,
@@ -2224,6 +2164,20 @@ function enhanceRankingsTable(eventID, sources) {
                             ? "-"
                             : `${eventValue == null ? "Seasonal" : "Event"}: ${formatNumber(displayedValue)}`
                     );
+                });
+            }).catch((error) => {
+                console.warn(
+                    `Arcbotics: Unable to load ${source.name} event ratings for team ${teamNumber}`,
+                    error
+                );
+                if (!RankingsTable.isConnected || !row.isConnected) return;
+                RATING_PHASES.forEach((phase) => {
+                    ["season", "event"].forEach((kind) => {
+                        const cell = cells[`${kind}-${phase.key}`];
+                        if (!cell) return;
+                        cell.dataset.sortValue = "";
+                        setCellLabel(cell, "-");
+                    });
                 });
             });
         });
