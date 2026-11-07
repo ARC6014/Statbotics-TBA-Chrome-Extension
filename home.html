@@ -92,6 +92,61 @@
             line-height: 1.4;
             color: #cbb7c3;
         }
+
+        .favorites-section {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            border-top: 1px solid #554650;
+            padding-top: 10px;
+        }
+
+        .favorites-heading {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .favorites-list {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+
+        .favorite-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+            padding: 5px 6px;
+            border-radius: 4px;
+            background: #292329;
+        }
+
+        .favorite-link {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            color: #FBE9F2;
+            text-decoration: none;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 12px;
+        }
+
+        .favorite-link:hover {
+            text-decoration: underline;
+        }
+
+        .favorites-status {
+            margin: 0;
+            color: #cbb7c3;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+
     </style>
 </head>
 <body>
@@ -105,7 +160,15 @@
             <button class="source-button peekorobo" data-source="peekorobo">Peekorobo</button>
             <button class="source-button both" data-source="both">Both</button>
         </div>
-        <p class="hint">Peekorobo shows ACE. Statbotics shows EPA. Both shows the two side by side. TBA pages update when you switch.</p>
+        <p class="hint">You may need to reload if the website indicates unavailable because it is most likely a rate problem, and simply reloading after waiting for a moment will fix it. Peekorobo shows ACE. Statbotics shows EPA. Both shows the two side by side. TBA pages update when you switch.</p>
+        <section class="favorites-section" aria-labelledby="favorites-heading">
+            <div class="favorites-heading">
+                <div class="label" id="favorites-heading">Favorite teams</div>
+                <span id="favorites-count" class="subtitle">0</span>
+            </div>
+            <div class="favorites-list" id="favorites-list" aria-live="polite"></div>
+            <p class="favorites-status" id="favorites-status"></p>
+        </section>
     </div>
 </body>
 <script src="extension.js"></script>
